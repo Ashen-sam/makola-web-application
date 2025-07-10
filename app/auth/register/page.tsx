@@ -11,13 +11,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Eye, EyeOff, Users, MapPin } from "lucide-react"
 import Link from "next/link"
+import { useSignUpMutation } from "@/services/users"
 
 interface FormErrors {
+  name?: string
   username?: string
-  fullName?: string
   password?: string
   confirmPassword?: string
-  phoneNumber?: string
+  address?: string
+  phone_number?: string
   nic?: string
   general?: string
 }
@@ -27,28 +29,29 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [errors, setErrors] = useState<FormErrors>({})
-  const [isLoading, setIsLoading] = useState(false)
+  const [signUp, { isLoading }] = useSignUpMutation()
 
   const [formData, setFormData] = useState({
+    name: "",
     username: "",
-    fullName: "",
     password: "",
     confirmPassword: "",
-    phoneNumber: "",
+    address: "",
+    phone_number: "",
     nic: "",
   })
 
   const validateForm = () => {
     const newErrors: FormErrors = {}
 
+    if (!formData.name.trim()) {
+      newErrors.name = "Full name is required"
+    }
+
     if (!formData.username.trim()) {
       newErrors.username = "Username is required"
     } else if (formData.username.length < 3) {
       newErrors.username = "Username must be at least 3 characters"
-    }
-
-    if (!formData.fullName.trim()) {
-      newErrors.fullName = "Full name is required"
     }
 
     if (!formData.password) {
@@ -63,12 +66,20 @@ export default function RegisterPage() {
       newErrors.confirmPassword = "Passwords do not match"
     }
 
-    if (!formData.phoneNumber.trim()) {
-      newErrors.phoneNumber = "Phone number is required"
+    if (!formData.address.trim()) {
+      newErrors.address = "Address is required"
+    }
+
+    if (!formData.phone_number.trim()) {
+      newErrors.phone_number = "Phone number is required"
+    } else if (!/^\d{10}$/.test(formData.phone_number.replace(/\D/g, ''))) {
+      newErrors.phone_number = "Please enter a valid 10-digit phone number"
     }
 
     if (!formData.nic.trim()) {
       newErrors.nic = "NIC is required"
+    } else if (!/^(\d{9}[VvXx]|\d{12})$/.test(formData.nic.replace(/\s/g, ''))) {
+      newErrors.nic = "Please enter a valid NIC number"
     }
 
     setErrors(newErrors)
@@ -89,17 +100,46 @@ export default function RegisterPage() {
       return
     }
 
-    setIsLoading(true)
-
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-      console.log("Registration successful:", formData)
+      // Prepare data for API call (exclude confirmPassword)
+      const { ...apiData } = formData
+
+      const response = await signUp(apiData).unwrap()
+
+      // Handle success response
+      console.log("Registration successful:", response)
       alert("Account created successfully! Please sign in.")
       router.push("/auth/login")
-    } catch (error) {
-      setErrors({ general: "An error occurred. Please try again." })
-    } finally {
-      setIsLoading(false)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      // Handle error response
+      console.error("Registration failed:", error)
+
+      let errorMessage = "An error occurred. Please try again."
+
+      // Handle different error response structures
+      if (error?.data?.message) {
+        errorMessage = error.data.message
+      } else if (error?.message) {
+        errorMessage = error.message
+      } else if (error?.status) {
+        // Handle HTTP status codes
+        switch (error.status) {
+          case 400:
+            errorMessage = "Invalid data provided. Please check your inputs."
+            break
+          case 409:
+            errorMessage = "Username or NIC already exists. Please try different values."
+            break
+          case 500:
+            errorMessage = "Server error. Please try again later."
+            break
+          default:
+            errorMessage = `Error: ${error.status}. Please try again.`
+        }
+      }
+
+      setErrors({ general: errorMessage })
     }
   }
 
@@ -136,6 +176,21 @@ export default function RegisterPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
+                <Label htmlFor="name" className="text-slate-700 font-medium">
+                  Full Name
+                </Label>
+                <Input
+                  id="name"
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => handleInputChange("name", e.target.value)}
+                  className={`h-11 ${errors.name ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"}`}
+                  placeholder="Enter your full name"
+                />
+                {errors.name && <p className="text-sm text-red-600">{errors.name}</p>}
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="username" className="text-slate-700 font-medium">
                   Username
                 </Label>
@@ -143,7 +198,7 @@ export default function RegisterPage() {
                   id="username"
                   type="text"
                   value={formData.username}
-                  onChange={(e) => handleInputChange("username", e.target.value)}
+                  onChange={(e) => handleInputChange("username", e.target.value.toLowerCase())}
                   className={`h-11 ${errors.username ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"}`}
                   placeholder="Enter your username"
                 />
@@ -151,18 +206,48 @@ export default function RegisterPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="fullName" className="text-slate-700 font-medium">
-                  Full Name
+                <Label htmlFor="address" className="text-slate-700 font-medium">
+                  Address
                 </Label>
                 <Input
-                  id="fullName"
+                  id="address"
                   type="text"
-                  value={formData.fullName}
-                  onChange={(e) => handleInputChange("fullName", e.target.value)}
-                  className={`h-11 ${errors.fullName ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"}`}
-                  placeholder="Enter your full name"
+                  value={formData.address}
+                  onChange={(e) => handleInputChange("address", e.target.value)}
+                  className={`h-11 ${errors.address ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"}`}
+                  placeholder="Enter your address"
                 />
-                {errors.fullName && <p className="text-sm text-red-600">{errors.fullName}</p>}
+                {errors.address && <p className="text-sm text-red-600">{errors.address}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone_number" className="text-slate-700 font-medium">
+                  Phone Number
+                </Label>
+                <Input
+                  id="phone_number"
+                  type="tel"
+                  value={formData.phone_number}
+                  onChange={(e) => handleInputChange("phone_number", e.target.value)}
+                  className={`h-11 ${errors.phone_number ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"}`}
+                  placeholder="Enter your phone number"
+                />
+                {errors.phone_number && <p className="text-sm text-red-600">{errors.phone_number}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="nic" className="text-slate-700 font-medium">
+                  NIC Number
+                </Label>
+                <Input
+                  id="nic"
+                  type="text"
+                  value={formData.nic}
+                  onChange={(e) => handleInputChange("nic", e.target.value.toUpperCase())}
+                  className={`h-11 ${errors.nic ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"}`}
+                  placeholder="Enter your NIC number"
+                />
+                {errors.nic && <p className="text-sm text-red-600">{errors.nic}</p>}
               </div>
 
               <div className="space-y-2">
@@ -211,36 +296,6 @@ export default function RegisterPage() {
                   </button>
                 </div>
                 {errors.confirmPassword && <p className="text-sm text-red-600">{errors.confirmPassword}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phoneNumber" className="text-slate-700 font-medium">
-                  Phone Number
-                </Label>
-                <Input
-                  id="phoneNumber"
-                  type="tel"
-                  value={formData.phoneNumber}
-                  onChange={(e) => handleInputChange("phoneNumber", e.target.value)}
-                  className={`h-11 ${errors.phoneNumber ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"}`}
-                  placeholder="Enter your phone number"
-                />
-                {errors.phoneNumber && <p className="text-sm text-red-600">{errors.phoneNumber}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="nic" className="text-slate-700 font-medium">
-                  NIC Number
-                </Label>
-                <Input
-                  id="nic"
-                  type="text"
-                  value={formData.nic}
-                  onChange={(e) => handleInputChange("nic", e.target.value.toUpperCase())}
-                  className={`h-11 ${errors.nic ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"}`}
-                  placeholder="Enter your NIC number"
-                />
-                {errors.nic && <p className="text-sm text-red-600">{errors.nic}</p>}
               </div>
 
               <Button

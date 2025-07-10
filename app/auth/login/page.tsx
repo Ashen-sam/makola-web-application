@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Eye, EyeOff, Users, MapPin, Shield } from "lucide-react"
 import LoadingScreen from "../../../components/loading-screen"
 import Link from "next/link"
+import { useSignInMutation } from "@/services/users"
 
 interface FormErrors {
   username?: string
@@ -23,9 +24,11 @@ export default function LoginPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [errors, setErrors] = useState<FormErrors>({})
-  const [isLoading, setIsLoading] = useState(false)
   const [showLoginLoading, setShowLoginLoading] = useState(false)
   const [isAdminLogin, setIsAdminLogin] = useState(false)
+
+  // RTK Query mutation hook
+  const [signIn, { isLoading }] = useSignInMutation()
 
   const [formData, setFormData] = useState({
     username: "",
@@ -61,11 +64,8 @@ export default function LoginPage() {
       return
     }
 
-    setIsLoading(true)
-
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-
+      // Handle admin login (keep the existing logic for admin)
       if (isAdminLogin) {
         if (formData.username === "admin" && formData.password === "admin1234") {
           console.log("Admin login successful")
@@ -75,19 +75,43 @@ export default function LoginPage() {
           }, 2500)
         } else {
           setErrors({ general: "Invalid admin credentials. Use: admin / admin1234" })
-          setIsLoading(false)
           return
         }
       } else {
-        console.log("User login successful")
+        // Handle regular user login with API call
+        const response = await signIn({
+          username: formData.username,
+          password: formData.password,
+        }).unwrap()
+
+        console.log("User login successful:", response)
+
+        // Store user data in localStorage or context/state management
+        localStorage.setItem('user', JSON.stringify(response.user))
+        localStorage.setItem('isAuthenticated', 'true')
+
         setShowLoginLoading(true)
         setTimeout(() => {
-          router.push("/user/feed")
+          // Route based on user role
+          if (response.user.role === "urban_councilor") {
+            router.push("/admin/dashboard")
+          } else {
+            router.push("/user/feed")
+          }
         }, 2500)
       }
-    } catch (error) {
-      setErrors({ general: "An error occurred. Please try again." })
-      setIsLoading(false)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      console.error("Login error:", error)
+
+      // Handle different types of errors
+      if (error?.data?.message) {
+        setErrors({ general: error.data.message })
+      } else if (error?.message) {
+        setErrors({ general: error.message })
+      } else {
+        setErrors({ general: "Login failed. Please check your credentials and try again." })
+      }
     }
   }
 
@@ -146,6 +170,7 @@ export default function LoginPage() {
                     onChange={(e) => handleInputChange("username", e.target.value)}
                     className={`h-11 ${errors.username ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"}`}
                     placeholder="Enter your username"
+                    disabled={isLoading}
                   />
                   {errors.username && <p className="text-sm text-red-600">{errors.username}</p>}
                 </div>
@@ -162,11 +187,13 @@ export default function LoginPage() {
                       onChange={(e) => handleInputChange("password", e.target.value)}
                       className={`h-11 pr-10 ${errors.password ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"}`}
                       placeholder="Enter your password"
+                      disabled={isLoading}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
+                      disabled={isLoading}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -177,7 +204,7 @@ export default function LoginPage() {
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-medium transition-all duration-200 hover:scale-105"
+                  className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-medium transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
                     <div className="flex items-center gap-2">
@@ -201,6 +228,7 @@ export default function LoginPage() {
                     setErrors({})
                   }}
                   className="w-full mb-4 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                  disabled={isLoading}
                 >
                   <Shield className="h-4 w-4 mr-2" />
                   {isAdminLogin ? "Switch to User Login" : "Admin Login"}
@@ -217,7 +245,7 @@ export default function LoginPage() {
               {/* Register Link */}
               <div className="text-center pt-4 border-t border-slate-200">
                 <p className="text-slate-600">
-                  Don't have an account?
+                  Don&#39;t have an account?
                   <Link
                     href="/auth/register"
                     className="ml-2 text-emerald-600 hover:text-emerald-700 font-medium transition-colors"
