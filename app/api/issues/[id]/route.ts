@@ -7,22 +7,14 @@ export async function GET(
   context: { params: { id: string } }
 ) {
   try {
-    // Alternative way to access params
-    const { params } = context;
-    
-    // Debug logging
-    console.log('Context:', context);
-    console.log('Params:', params);
-    console.log('Request URL:', request.url);
+    const params = await context.params;
     
     // Extract ID from URL as fallback
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/');
     const idFromPath = pathSegments[pathSegments.length - 1];
     
-    console.log('ID from path:', idFromPath);
-    
-    const issueId = parseInt(params?.id || idFromPath);
+    const issueId = parseInt(params.id || idFromPath);
 
     if (isNaN(issueId)) {
       return NextResponse.json({ error: 'Invalid issue ID' }, { status: 400 });
@@ -43,7 +35,6 @@ export async function GET(
       .single();
 
     if (issueError || !issue) {
-      console.log('Issue error:', issueError);
       return NextResponse.json({ error: 'Issue not found' }, { status: 404 });
     }
 
@@ -61,7 +52,6 @@ export async function GET(
       .order('created_at', { ascending: true });
 
     if (commentsError) {
-      console.log('Comments error:', commentsError);
       return NextResponse.json({ error: 'Failed to fetch comments' }, { status: 500 });
     }
 
@@ -82,14 +72,14 @@ export async function PUT(
   context: { params: { id: string } }
 ) {
   try {
-    const { params } = context;
+    const params = await context.params;
     
     // Extract ID from URL as fallback
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/');
     const idFromPath = pathSegments[pathSegments.length - 1];
     
-    const issueId = parseInt(params?.id || idFromPath);
+    const issueId = parseInt(params.id || idFromPath);
     
     const { 
       title, 
@@ -194,14 +184,14 @@ export async function DELETE(
   context: { params: { id: string } }
 ) {
   try {
-    const { params } = context;
+    const params = await context.params;
     
     // Extract ID from URL as fallback
     const url = new URL(request.url);
     const pathSegments = url.pathname.split('/');
     const idFromPath = pathSegments[pathSegments.length - 1];
     
-    const issueId = parseInt(params?.id || idFromPath);
+    const issueId = parseInt(params.id || idFromPath);
     const { user_id, role } = await request.json();
 
     if (isNaN(issueId)) {
