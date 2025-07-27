@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { Heart, MessageCircle, Share2, MapPin, Clock, AlertTriangle, CheckCircle, XCircle, ArrowUp } from "lucide-react"
+import { useAddCommentToIssueMutation, useGetCommentsForIssueQuery, useUpvoteIssueMutation } from "@/services/issues"
+import { AlertTriangle, ArrowUp, CheckCircle, Clock, Loader2, MapPin, MessageCircle, Share2, XCircle } from "lucide-react"
+import { useMemo, useState } from "react"
 
 interface Comment {
   id: string
@@ -15,6 +16,11 @@ interface Comment {
   content: string
   timestamp: string
 }
+interface User {
+  user_id: number;
+  role: "resident" | "urban_councilor";
+  username: string;
+}
 
 interface IssuePostProps {
   id: string
@@ -22,7 +28,7 @@ interface IssuePostProps {
   avatar: string
   title: string
   description: string
-  image?: string
+  photo?: string
   location: string
   timestamp: string
   priority: "low" | "medium" | "high" | "critical"
@@ -32,6 +38,8 @@ interface IssuePostProps {
   comments: Comment[]
   isLiked: boolean
   isUpvoted: boolean
+  issueId?: string | number
+  user?: User
 }
 
 export default function IssuePost({
@@ -39,48 +47,131 @@ export default function IssuePost({
   avatar,
   title,
   description,
-  image,
+  photo,
   location,
   timestamp,
   priority,
   status,
-  likes,
   upvotes,
-  comments,
-  isLiked: initialIsLiked,
+  issueId,
+  user,
   isUpvoted: initialIsUpvoted,
 }: IssuePostProps) {
-  const [isLiked, setIsLiked] = useState(initialIsLiked)
   const [isUpvoted, setIsUpvoted] = useState(initialIsUpvoted)
-  const [likeCount, setLikeCount] = useState(likes)
   const [upvoteCount, setUpvoteCount] = useState(upvotes)
   const [showComments, setShowComments] = useState(false)
   const [newComment, setNewComment] = useState("")
-  const [postComments, setPostComments] = useState(comments)
+  const [hasLoadedComments, setHasLoadedComments] = useState(false) // New state to track if comments have been loaded
 
-  const handleLike = () => {
-    setIsLiked(!isLiked)
-    setLikeCount(isLiked ? likeCount - 1 : likeCount + 1)
-  }
+  const numericIssueId = typeof issueId === 'string' ? parseInt(issueId) : issueId;
+  const [addComment, { isLoading: isAddingComment }] = useAddCommentToIssueMutation()
+  const [upvoteIssue] = useUpvoteIssueMutation()
 
-  const handleUpvote = () => {
-    setIsUpvoted(!isUpvoted)
-    setUpvoteCount(isUpvoted ? upvoteCount - 1 : upvoteCount + 1)
-  }
+  // Modified query - skip until comments are requested
+  const {
+    data: commentsData,
+    isLoading: isLoadingComments,
+    refetch: refetchComments
+  } = useGetCommentsForIssueQuery(numericIssueId as number, {
+    skip: !hasLoadedComments || numericIssueId === undefined, // Skip until hasLoadedComments is true
+  });
 
-  const handleComment = () => {
-    if (newComment.trim()) {
-      const comment: Comment = {
-        id: Date.now().toString(),
-        author: "You",
-        avatar: "/placeholder.svg?height=32&width=32",
-        content: newComment,
-        timestamp: "Just now",
-      }
-      setPostComments([...postComments, comment])
-      setNewComment("")
+  const formatTimestamp = (dateString: string): string => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInMs = now.getTime() - date.getTime();
+    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+    const diffInDays = Math.floor(diffInHours / 24);
+
+    if (diffInDays > 0) {
+      return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
+    } else if (diffInHours > 0) {
+      return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
+    } else {
+      return 'Just now';
     }
+  };
+
+  // Fixed transformedComments with proper type checking and error handling
+  const transformedComments = useMemo(() => {
+    // Add comprehensive type checking
+    if (!commentsData) {
+      console.log('commentsData is null/undefined');
+      return [];
+    }
+
+    // Check if commentsData is an object with a comments property
+    if (typeof commentsData === 'object' && !Array.isArray(commentsData)) {
+      // Handle case where API returns { comments: [...] } or similar structure
+      if ('comments' in commentsData && Array.isArray(commentsData.comments)) {
+        return commentsData.comments.map(comment => ({
+          id: comment.comment_id.toString(),
+          author: comment.users?.username || 'Unknown User',
+          avatar: "/placeholder.svg?height=32&width=32",
+          content: comment.content,
+          timestamp: formatTimestamp(comment.created_at),
+        }));
+      }
+
+      // Handle case where API returns empty object {} when no comments
+      console.log('commentsData is an object but not expected format:', commentsData);
+      return [];
+    }
+
+    if (!Array.isArray(commentsData)) {
+      console.error('commentsData is not an array:', commentsData);
+      return [];
+    }
+
+    return commentsData.map(comment => ({
+      id: comment.comment_id.toString(),
+      author: comment.users?.username || 'Unknown User',
+      avatar: "/placeholder.svg?height=32&width=32",
+      content: comment.content,
+      timestamp: formatTimestamp(comment.created_at),
+    }));
+  }, [commentsData]);
+
+  // Modified handleCommentToggle function
+  const handleCommentToggle = () => {
+    if (!showComments && !hasLoadedComments) {
+      // First time clicking comments - trigger API call
+      setHasLoadedComments(true)
+    }
+    setShowComments(!showComments)
   }
+
+  const handleComment = async () => {
+    if (!newComment.trim()) return;
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      if (typeof numericIssueId === "number" && !isNaN(numericIssueId)) {
+        await addComment({
+          issueId: numericIssueId as number,
+          data: {
+            content: newComment.trim(),
+            user_id: user.user_id,
+          }
+        }).unwrap();
+      } else {
+        throw new Error("Issue ID is not valid.");
+      }
+
+      setNewComment("");
+      // Refetch comments to get the updated list
+      refetchComments();
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error('Error adding comment:', error.message);
+      } else {
+        console.error('Error adding comment:', error);
+      }
+    }
+  };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -96,6 +187,30 @@ export default function IssuePost({
         return "bg-gray-100 text-gray-800 border-gray-200"
     }
   }
+
+  const handleUpvote = async () => {
+    if (!user) {
+      return;
+    }
+
+    try {
+      if (typeof numericIssueId !== "number" || isNaN(numericIssueId)) {
+        throw new Error("Issue ID is not valid.");
+      }
+      const result = await upvoteIssue({
+        issueId: numericIssueId as number,
+        data: {
+          user_id: user.user_id,
+          action: "upvote"
+        }
+      }).unwrap();
+
+      setUpvoteCount(result.vote_count);
+      setIsUpvoted(!isUpvoted);
+    } catch (error: unknown) {
+      console.error('Error upvoting:', error);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -167,9 +282,9 @@ export default function IssuePost({
           <p className="text-slate-700 leading-relaxed">{description}</p>
         </div>
 
-        {image && (
+        {photo && (
           <div className="rounded-lg overflow-hidden">
-            <img src={image || "/placeholder.svg"} alt="Issue" className="w-full h-64 object-cover" />
+            <img src={photo} alt="Issue" className="w-full h-64 object-cover" />
           </div>
         )}
 
@@ -181,8 +296,8 @@ export default function IssuePost({
               size="sm"
               onClick={handleUpvote}
               className={`flex items-center gap-2 ${isUpvoted
-                  ? "text-emerald-600 hover:text-emerald-700 bg-emerald-50"
-                  : "text-slate-600 hover:text-slate-700"
+                ? "text-emerald-600 hover:text-emerald-700 bg-emerald-50"
+                : "text-slate-600 hover:text-slate-700"
                 }`}
             >
               <ArrowUp className={`h-4 w-4 ${isUpvoted ? "fill-current" : ""}`} />
@@ -192,22 +307,11 @@ export default function IssuePost({
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleLike}
-              className={`flex items-center gap-2 ${isLiked ? "text-red-600 hover:text-red-700" : "text-slate-600 hover:text-slate-700"
-                }`}
-            >
-              <Heart className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`} />
-              <span>{likeCount}</span>
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowComments(!showComments)}
+              onClick={handleCommentToggle} // Updated to use new function
               className="flex items-center gap-2 text-slate-600 hover:text-slate-700"
             >
               <MessageCircle className="h-4 w-4" />
-              <span>{postComments.length}</span>
+              <span>{transformedComments.length}</span>
             </Button>
 
             <Button variant="ghost" size="sm" className="flex items-center gap-2 text-slate-600 hover:text-slate-700">
@@ -236,39 +340,48 @@ export default function IssuePost({
                   onChange={(e) => setNewComment(e.target.value)}
                   className="min-h-[80px] resize-none border-slate-300 focus:border-emerald-500"
                 />
+
                 <Button
                   onClick={handleComment}
-                  disabled={!newComment.trim()}
+                  disabled={!newComment.trim() || isAddingComment}
                   size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-700"
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
                 >
-                  Comment
+                  {isAddingComment ? "Adding..." : "Comment"}
                 </Button>
               </div>
             </div>
 
             {/* Comments List */}
             <div className="space-y-3">
-              {postComments.map((comment) => (
-                <div key={comment.id} className="flex gap-3">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={comment.avatar || "/placeholder.svg"} />
-                    <AvatarFallback className="bg-slate-100 text-slate-700">
-                      {comment.author
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <div className="bg-slate-50 rounded-lg p-3">
-                      <p className="font-semibold text-sm text-slate-900">{comment.author}</p>
-                      <p className="text-slate-700 mt-1">{comment.content}</p>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-1">{comment.timestamp}</p>
-                  </div>
+              {isLoadingComments ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
                 </div>
-              ))}
+              ) : transformedComments.length > 0 ? (
+                transformedComments.map((comment: Comment) => (
+                  <div key={comment.id} className="flex gap-3">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={comment.avatar || "/placeholder.svg"} />
+                      <AvatarFallback className="bg-slate-100 text-slate-700">
+                        {comment.author
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <div className="bg-slate-50 rounded-lg p-3">
+                        <p className="font-semibold text-sm text-slate-900">{comment.author}</p>
+                        <p className="text-slate-700 mt-1">{comment.content}</p>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">{comment.timestamp}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-center text-slate-500 py-4">No comments yet. Be the first to comment!</p>
+              )}
             </div>
           </div>
         )}

@@ -21,13 +21,34 @@ interface LayoutProps {
   onPageChange: (page: string) => void
 }
 
+interface UserData {
+  id: string
+  username: string
+  firstName?: string
+  lastName?: string
+  email?: string
+  role?: string
+}
+
 export default function Layout({ children, currentPage, onPageChange }: LayoutProps) {
   const [notifications] = useState(3)
   const [showLoading, setShowLoading] = useState(false)
   const [loadingType, setLoadingType] = useState<"refresh" | "login" | "logout">("refresh")
+  const [user, setUser] = useState<UserData | null>(null)
 
   useEffect(() => {
     console.log("User Layout initialized")
+
+    // Get user data from localStorage
+    try {
+      const userData = localStorage.getItem('user')
+      if (userData) {
+        const parsedUser = JSON.parse(userData)
+        setUser(parsedUser)
+      }
+    } catch (error) {
+      console.error("Error parsing user data from localStorage:", error)
+    }
   }, [])
 
   const navItems = [
@@ -41,6 +62,10 @@ export default function Layout({ children, currentPage, onPageChange }: LayoutPr
     setLoadingType("logout")
     setShowLoading(true)
 
+    // Clear user data from localStorage
+    localStorage.removeItem('user')
+    localStorage.removeItem('isAuthenticated')
+
     // Simulate logout process
     setTimeout(() => {
       console.log("User signed out - redirecting to landing page")
@@ -52,6 +77,39 @@ export default function Layout({ children, currentPage, onPageChange }: LayoutPr
   const handlePageChange = (page: string) => {
     console.log(`Navigating to page: ${page}`)
     onPageChange(page)
+  }
+
+  // Helper function to get display name
+  const getDisplayName = () => {
+    if (!user) return "User"
+
+    // If firstName and lastName are available, use them
+    if (user.firstName && user.lastName) {
+      return `${user.firstName} ${user.lastName}`
+    }
+
+    // If firstName is available, use it
+    if (user.firstName) {
+      return user.firstName
+    }
+
+    // Otherwise, use username
+    return user.username
+  }
+
+  // Helper function to get initials for avatar
+  const getInitials = () => {
+    if (!user) return "U"
+
+    if (user.firstName && user.lastName) {
+      return `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`
+    }
+
+    if (user.firstName) {
+      return user.firstName.charAt(0).toUpperCase()
+    }
+
+    return user.username.charAt(0).toUpperCase()
   }
 
   return (
@@ -83,11 +141,10 @@ export default function Layout({ children, currentPage, onPageChange }: LayoutPr
                       key={item.id}
                       variant={currentPage === item.id ? "default" : "ghost"}
                       onClick={() => handlePageChange(item.id)}
-                      className={`flex items-center gap-2 transition-colors duration-200 ${
-                        currentPage === item.id
-                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                          : "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
-                      }`}
+                      className={`flex items-center gap-2 transition-colors duration-200 ${currentPage === item.id
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        : "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
+                        }`}
                     >
                       <Icon className="h-4 w-4" />
                       {item.label}
@@ -115,9 +172,11 @@ export default function Layout({ children, currentPage, onPageChange }: LayoutPr
                     >
                       <Avatar className="h-8 w-8">
                         <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                        <AvatarFallback className="bg-emerald-100 text-emerald-700">JD</AvatarFallback>
+                        <AvatarFallback className="bg-emerald-100 text-emerald-700">
+                          {getInitials()}
+                        </AvatarFallback>
                       </Avatar>
-                      <span className="hidden md:block text-slate-700">John Doe</span>
+                      <span className="hidden md:block text-slate-700">{getDisplayName()}</span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
@@ -145,11 +204,10 @@ export default function Layout({ children, currentPage, onPageChange }: LayoutPr
                     variant={currentPage === item.id ? "default" : "ghost"}
                     size="sm"
                     onClick={() => handlePageChange(item.id)}
-                    className={`flex items-center gap-1 text-xs transition-colors duration-200 ${
-                      currentPage === item.id
-                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                        : "text-slate-700 hover:text-slate-900 hover:scale-105"
-                    }`}
+                    className={`flex items-center gap-1 text-xs transition-colors duration-200 ${currentPage === item.id
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "text-slate-700 hover:text-slate-900 hover:scale-105"
+                      }`}
                   >
                     <Icon className="h-4 w-4" />
                     {item.label}

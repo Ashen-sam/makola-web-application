@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -19,11 +19,36 @@ interface UserLayoutProps {
   children: React.ReactNode
 }
 
+interface UserData {
+  id: string
+  username: string
+  firstName?: string
+  lastName?: string
+  email?: string
+  role?: string
+}
+
 export default function UserLayout({ children }: UserLayoutProps) {
   const router = useRouter()
   const pathname = usePathname()
   const [notifications] = useState(3)
   const [showLoading, setShowLoading] = useState(false)
+  const [user, setUser] = useState<UserData | null>(null)
+
+  useEffect(() => {
+    console.log("User Layout initialized")
+
+    // Get user data from localStorage
+    try {
+      const userData = localStorage.getItem('user')
+      if (userData) {
+        const parsedUser = JSON.parse(userData)
+        setUser(parsedUser)
+      }
+    } catch (error) {
+      console.error("Error parsing user data from localStorage:", error)
+    }
+  }, [])
 
   const navItems = [
     { id: "feed", label: "Feed", icon: Home, path: "/user/feed" },
@@ -34,13 +59,53 @@ export default function UserLayout({ children }: UserLayoutProps) {
 
   const handleSignOut = () => {
     setShowLoading(true)
+
+    // Clear user data from localStorage
+    localStorage.removeItem('user')
+    localStorage.removeItem('isAuthenticated')
+
+    // Simulate logout process
     setTimeout(() => {
+      console.log("User signed out - redirecting to landing page")
       router.push("/")
     }, 2500)
   }
 
   const handleNavigation = (path: string) => {
     router.push(path)
+  }
+
+  // Helper function to get display name
+  const getDisplayName = () => {
+    if (!user) return "User"
+
+    // If firstName and lastName are available, use them
+    if (user.firstName && user.lastName) {
+      return `${user.firstName} ${user.lastName}`
+    }
+
+    // If firstName is available, use it
+    if (user.firstName) {
+      return user.firstName
+    }
+
+    // Otherwise, use username
+    return user.username
+  }
+
+  // Helper function to get initials for avatar
+  const getInitials = () => {
+    if (!user) return "U"
+
+    if (user.firstName && user.lastName) {
+      return `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`
+    }
+
+    if (user.firstName) {
+      return user.firstName.charAt(0).toUpperCase()
+    }
+
+    return user.username.charAt(0).toUpperCase()
   }
 
   return (
@@ -52,7 +117,7 @@ export default function UserLayout({ children }: UserLayoutProps) {
         <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200 sticky top-0 z-40">
           <div className="max-w-6xl mx-auto px-4 py-3">
             <div className="flex items-center justify-between">
-              {/* Logo */}
+              {/* Logo - Static version without animation */}
               <div className="flex items-center gap-3">
                 <div className="bg-emerald-600 p-2 rounded-lg">
                   <MapPin className="h-6 w-6 text-white" />
@@ -74,8 +139,8 @@ export default function UserLayout({ children }: UserLayoutProps) {
                       variant={isActive ? "default" : "ghost"}
                       onClick={() => handleNavigation(item.path)}
                       className={`flex items-center gap-2 transition-colors duration-200 ${isActive
-                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                          : "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        : "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
                         }`}
                     >
                       <Icon className="h-4 w-4" />
@@ -90,7 +155,7 @@ export default function UserLayout({ children }: UserLayoutProps) {
                 <Button variant="ghost" size="sm" className="relative hover:scale-110 transition-transform">
                   <Bell className="h-5 w-5 text-slate-600" />
                   {notifications > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center ">
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
                       {notifications}
                     </span>
                   )}
@@ -104,9 +169,11 @@ export default function UserLayout({ children }: UserLayoutProps) {
                     >
                       <Avatar className="h-8 w-8">
                         <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                        <AvatarFallback className="bg-emerald-100 text-emerald-700">JD</AvatarFallback>
+                        <AvatarFallback className="bg-emerald-100 text-emerald-700">
+                          {getInitials()}
+                        </AvatarFallback>
                       </Avatar>
-                      <span className="hidden md:block text-slate-700">John Doe</span>
+                      <span className="hidden md:block text-slate-700">{getDisplayName()}</span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
@@ -136,8 +203,8 @@ export default function UserLayout({ children }: UserLayoutProps) {
                     size="sm"
                     onClick={() => handleNavigation(item.path)}
                     className={`flex items-center gap-1 text-xs transition-colors duration-200 ${isActive
-                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                        : "text-slate-700 hover:text-slate-900"
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "text-slate-700 hover:text-slate-900"
                       }`}
                   >
                     <Icon className="h-4 w-4" />
