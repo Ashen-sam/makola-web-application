@@ -1,25 +1,28 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import FreeMapComponent from "@/components/ui/FreeMapComponent"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Upload, MapPin, Calendar, Clock, AlertTriangle, Camera } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { supabase } from "@/lib/supabaseClient"
+import { AlertTriangle, Calendar, Camera, Clock, Upload } from "lucide-react"
 import Image from "next/image"
+import type React from "react"
+import { useEffect, useState } from "react"
+import toast from "react-hot-toast"
 
 interface FormData {
   title: string
   description: string
   location: string
+  latitude?: number // Changed from coordinates to latitude/longitude
+  longitude?: number
   date: string
   time: string
-  priority: string
+  priority: "low" | "medium" | "high"
   category: string
   photo: File | null
 }
@@ -33,7 +36,12 @@ interface FormErrors {
   priority?: string
   category?: string
   photo?: string
-  general?: string
+}
+
+interface User {
+  user_id: number
+  role: "resident" | "urban_councilor"
+  username: string
 }
 
 export default function ReportIssue() {
@@ -41,9 +49,11 @@ export default function ReportIssue() {
     title: "",
     description: "",
     location: "",
+    latitude: undefined,
+    longitude: undefined,
     date: "",
     time: "",
-    priority: "",
+    priority: "medium" as const,
     category: "",
     photo: null,
   })
@@ -51,6 +61,31 @@ export default function ReportIssue() {
   const [errors, setErrors] = useState<FormErrors>({})
   const [isLoading, setIsLoading] = useState(false)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<number>(0)
+  const [user, setUser] = useState<User | null>(null)
+
+  // RTK Query mutation hook
+
+  // Get user data from localStorage on component mount
+  useEffect(() => {
+    const userData = localStorage.getItem('user')
+    const isAuthenticated = localStorage.getItem('isAuthenticated')
+
+    if (userData && isAuthenticated === 'true') {
+      try {
+        const parsedUser = JSON.parse(userData)
+        setUser(parsedUser)
+        console.log('User data loaded:', parsedUser)
+      } catch (error) {
+        console.error('Error parsing user data:', error)
+        toast.error('Authentication error. Please log in again.')
+        window.location.href = '/auth/login'
+      }
+    } else {
+      toast.error('Please log in to report issues')
+      window.location.href = '/auth/login'
+    }
+  }, [])
 
   const categories = [
     "Road & Transportation",
@@ -67,7 +102,6 @@ export default function ReportIssue() {
     { value: "low", label: "Low", description: "Minor issue, not urgent" },
     { value: "medium", label: "Medium", description: "Moderate issue, needs attention" },
     { value: "high", label: "High", description: "Important issue, requires prompt action" },
-    { value: "critical", label: "Critical", description: "Urgent issue, immediate action needed" },
   ]
 
   const validateForm = (): boolean => {
@@ -87,6 +121,10 @@ export default function ReportIssue() {
 
     if (!formData.location.trim()) {
       newErrors.location = "Location is required"
+    }
+
+    if (!formData.latitude || !formData.longitude) {
+      newErrors.location = "Please select a location on the map"
     }
 
     if (!formData.date) {
@@ -109,10 +147,27 @@ export default function ReportIssue() {
     return Object.keys(newErrors).length === 0
   }
 
-  const handleInputChange = (field: keyof FormData, value: string) => {
+  const handleInputChange = (
+    field: keyof FormData,
+    value: string
+  ) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
-    if (errors[field]) {
+    if (field in errors) {
       setErrors((prev) => ({ ...prev, [field]: undefined }))
+    }
+  }
+
+  // Handle location change from LocationMapComponent
+  const handleLocationChange = (location: string, coordinates?: { lat: number; lng: number }) => {
+    setFormData((prev) => ({
+      ...prev,
+      location,
+      latitude: coordinates?.lat,
+      longitude: coordinates?.lng,
+    }))
+
+    if (errors.location) {
+      setErrors((prev) => ({ ...prev, location: undefined }))
     }
   }
 
@@ -120,56 +175,189 @@ export default function ReportIssue() {
     const file = e.target.files?.[0]
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
-        // 5MB limit
-        setErrors((prev) => ({ ...prev, general: "Photo size must be less than 5MB" }))
+        toast.error("Photo size must be less than 5MB")
+        setErrors((prev) => ({ ...prev, photo: "Photo size must be less than 5MB" }))
+        return
+      }
+
+      if (!file.type.startsWith('image/')) {
+        toast.error("Please select a valid image file")
+        setErrors((prev) => ({ ...prev, photo: "Please select a valid image file" }))
         return
       }
 
       setFormData((prev) => ({ ...prev, photo: file }))
+      setErrors((prev) => ({ ...prev, photo: undefined }))
 
       const reader = new FileReader()
       reader.onload = (e) => {
         setPhotoPreview(e.target?.result as string)
       }
       reader.readAsDataURL(file)
+
+      toast.success("Photo uploaded successfully")
+    }
+  }
+
+  const uploadPhotoToSupabase = async (file: File): Promise<string | null> => {
+    try {
+      const fileExt = file.name.split('.').pop()
+      const timestamp = Date.now()
+      const randomString = Math.random().toString(36).substring(2)
+      const fileName = `${timestamp}-${randomString}.${fileExt}`
+      const filePath = `${fileName}`
+
+      setUploadProgress(25)
+
+      const { data, error } = await supabase.storage
+        .from('issue-photos')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        })
+
+      setUploadProgress(75)
+
+      if (error) {
+        console.error('Error uploading photo:', error)
+        throw new Error(`Upload failed: ${error.message}`)
+      }
+
+      console.log('Upload successful:', data)
+
+      const { data: publicUrlData } = supabase.storage
+        .from('issue-photos')
+        .getPublicUrl(data.path)
+
+      setUploadProgress(100)
+      return publicUrlData.publicUrl
+
+    } catch (error) {
+      console.error('Photo upload error:', error)
+      setUploadProgress(0)
+      throw error
     }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (!user) {
+      toast.error("User not authenticated. Please log in again.")
+      return
+    }
+
     if (!validateForm()) {
+      toast.error("Please fill in all required fields correctly")
       return
     }
 
     setIsLoading(true)
+    setUploadProgress(0)
+    setErrors({})
+
+    // Show loading toast
+    const loadingToast = toast.loading("Submitting your issue report...")
 
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      let photoUrl: string | null = null
 
-      console.log("Issue reported:", formData)
-      alert("Issue reported successfully! Thank you for helping improve our community.")
+      if (formData.photo) {
+        setUploadProgress(10)
+        toast.loading("Uploading photo...", { id: loadingToast })
+        photoUrl = await uploadPhotoToSupabase(formData.photo)
+      }
+
+      // Prepare issue data according to your backend API structure
+      const issueData = {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        category: formData.category,
+        priority: formData.priority,
+        location: formData.location.trim(),
+        latitude: formData.latitude, // Send latitude and longitude separately
+        longitude: formData.longitude,
+        date_observed: formData.date,
+        time_observed: formData.time,
+        user_id: user.user_id,
+        role: user.role,
+        ...(photoUrl && { photo: photoUrl })
+      }
+
+      console.log('Submitting issue data:', issueData)
+
+      // Make direct API call instead of RTK Query for better error handling
+      const response = await fetch('/api/issues', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(issueData),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create issue')
+      }
+
+      console.log('Issue created successfully:', result)
+
+      // Success toast
+      toast.success("Issue reported successfully! Thank you for helping improve our community.", {
+        id: loadingToast,
+        duration: 4000,
+      })
 
       // Reset form
       setFormData({
         title: "",
         description: "",
         location: "",
+        latitude: undefined,
+        longitude: undefined,
         date: "",
         time: "",
-        priority: "",
+        priority: "medium",
         category: "",
         photo: null,
       })
       setPhotoPreview(null)
       setErrors({})
-    } catch (error) {
-      console.log(error)
-      setErrors({ general: "Failed to submit issue. Please try again." })
+      setUploadProgress(0)
+
+    } catch (error: unknown) {
+      console.error('Error creating issue:', error)
+
+      let errorMessage = "Failed to submit issue. Please try again."
+
+      if (typeof error === "object" && error !== null && "message" in error && typeof (error as { message?: string }).message === "string") {
+        errorMessage = (error as { message: string }).message
+      }
+
+      // Error toast
+      toast.error(errorMessage, {
+        id: loadingToast,
+        duration: 4000,
+      })
     } finally {
       setIsLoading(false)
     }
+  }
+
+  if (!user) {
+    return (
+      <div className="max-w-7xl mx-auto space-y-6">
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
+          <CardContent className="py-12">
+            <div className="text-center space-y-4">
+              <div className="w-8 h-8 border-2 border-slate-300 border-t-emerald-600 rounded-full animate-spin mx-auto" />
+              <p className="text-slate-600">Loading...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -184,13 +372,29 @@ export default function ReportIssue() {
             Help improve our community by reporting issues that need attention. Provide as much detail as possible for
             faster resolution.
           </p>
+          <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+            Logged in as: {user.username} ({user.role}) - ID: {user.user_id}
+          </div>
         </CardHeader>
 
         <CardContent>
-          {errors.general && (
-            <Alert className="mb-6 border-red-200 bg-red-50">
-              <AlertDescription className="text-red-700">{errors.general}</AlertDescription>
-            </Alert>
+          {isLoading && uploadProgress > 0 && (
+            <div className="mb-6">
+              <div className="flex justify-between text-sm text-slate-600 mb-1">
+                <span>
+                  {uploadProgress < 25 ? 'Preparing...' :
+                    uploadProgress < 75 ? 'Uploading photo...' :
+                      uploadProgress < 100 ? 'Processing...' : 'Submitting issue...'}
+                </span>
+                <span>{Math.round(uploadProgress)}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-emerald-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                ></div>
+              </div>
+            </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -205,6 +409,7 @@ export default function ReportIssue() {
                   onChange={(e) => handleInputChange("title", e.target.value)}
                   placeholder="Brief, descriptive title of the issue"
                   className={`h-11 ${errors.title ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"}`}
+                  disabled={isLoading}
                 />
                 {errors.title && <p className="text-sm text-red-600">{errors.title}</p>}
               </div>
@@ -213,7 +418,11 @@ export default function ReportIssue() {
                 <Label htmlFor="category" className="text-slate-700 font-medium">
                   Category *
                 </Label>
-                <Select value={formData.category} onValueChange={(value) => handleInputChange("category", value)}>
+                <Select
+                  value={formData.category}
+                  onValueChange={(value) => handleInputChange("category", value)}
+                  disabled={isLoading}
+                >
                   <SelectTrigger
                     className={`h-11 ${errors.category ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"} w-full`}
                   >
@@ -233,27 +442,26 @@ export default function ReportIssue() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="location" className="text-slate-700 font-medium">
+                <Label className="text-slate-700 font-medium">
                   Location *
                 </Label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-                  <Input
-                    id="location"
-                    value={formData.location}
-                    onChange={(e) => handleInputChange("location", e.target.value)}
-                    placeholder="Specific location or address"
-                    className={`h-11 pl-10 ${errors.location ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"}`}
-                  />
-                </div>
-                {errors.location && <p className="text-sm text-red-600">{errors.location}</p>}
+                <FreeMapComponent
+                  value={formData.location}
+                  onChange={handleLocationChange}
+                  error={errors.location}
+                  disabled={isLoading}
+                />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="priority" className="text-slate-700 font-medium">
                   Priority Level *
                 </Label>
-                <Select value={formData.priority} onValueChange={(value) => handleInputChange("priority", value)}>
+                <Select
+                  value={formData.priority}
+                  onValueChange={(value) => handleInputChange("priority", value as "low" | "medium" | "high")}
+                  disabled={isLoading}
+                >
                   <SelectTrigger
                     className={`h-11 ${errors.priority ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"} w-full`}
                   >
@@ -274,7 +482,6 @@ export default function ReportIssue() {
               </div>
             </div>
 
-            {/* Row 3: Date and Time */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="date" className="text-slate-700 font-medium">
@@ -288,6 +495,7 @@ export default function ReportIssue() {
                     value={formData.date}
                     onChange={(e) => handleInputChange("date", e.target.value)}
                     className={`h-11 pl-10 ${errors.date ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"}`}
+                    disabled={isLoading}
                   />
                 </div>
                 {errors.date && <p className="text-sm text-red-600">{errors.date}</p>}
@@ -305,13 +513,13 @@ export default function ReportIssue() {
                     value={formData.time}
                     onChange={(e) => handleInputChange("time", e.target.value)}
                     className={`h-11 pl-10 ${errors.time ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"}`}
+                    disabled={isLoading}
                   />
                 </div>
                 {errors.time && <p className="text-sm text-red-600">{errors.time}</p>}
               </div>
             </div>
 
-            {/* Row 4: Description and Photo */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="description" className="text-slate-700 font-medium">
@@ -323,6 +531,8 @@ export default function ReportIssue() {
                   onChange={(e) => handleInputChange("description", e.target.value)}
                   placeholder="Provide detailed description of the issue, including any relevant context or impact on the community"
                   className={`min-h-[140px] resize-none ${errors.description ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"}`}
+                  disabled={isLoading}
+                  maxLength={500}
                 />
                 {errors.description && <p className="text-sm text-red-600">{errors.description}</p>}
                 <p className="text-xs text-slate-500">{formData.description.length}/500 characters</p>
@@ -336,11 +546,11 @@ export default function ReportIssue() {
                   {photoPreview ? (
                     <div className="space-y-3 w-full">
                       <Image
-                        src={photoPreview || "/placeholder.svg"}
+                        src={photoPreview}
                         alt="Preview"
                         className="max-h-24 mx-auto rounded-lg object-cover"
-                        width={600}
-                        height={500}
+                        width={96}
+                        height={96}
                       />
                       <Button
                         type="button"
@@ -350,6 +560,7 @@ export default function ReportIssue() {
                           setPhotoPreview(null)
                           setFormData((prev) => ({ ...prev, photo: null }))
                         }}
+                        disabled={isLoading}
                       >
                         Remove Photo
                       </Button>
@@ -366,8 +577,16 @@ export default function ReportIssue() {
                       </div>
                     </div>
                   )}
-                  <Input id="photo" type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                  <Input
+                    id="photo"
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoUpload}
+                    className="hidden"
+                    disabled={isLoading}
+                  />
                 </div>
+                {errors.photo && <p className="text-sm text-red-600">{errors.photo}</p>}
               </div>
             </div>
 
@@ -380,7 +599,7 @@ export default function ReportIssue() {
                 {isLoading ? (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Submitting Issue...
+                    {uploadProgress > 0 && uploadProgress < 100 ? 'Uploading...' : 'Submitting Issue...'}
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">

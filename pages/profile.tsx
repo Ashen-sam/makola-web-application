@@ -12,7 +12,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   User,
-  Mail,
   Phone,
   MapPin,
   Calendar,
@@ -223,25 +222,6 @@ export default function Profile() {
                   </div>
                 </div>
 
-                {/* Email */}
-                <div className="space-y-1">
-                  <Label className="text-slate-600 text-sm">Email</Label>
-                  {isEditing ? (
-                    <div>
-                      <Input
-                        value={editProfile.email}
-                        onChange={(e) => handleInputChange("email", e.target.value)}
-                        className={`${errors.email ? "border-red-300" : "border-slate-300"}`}
-                      />
-                      {errors.email && <p className="text-sm text-red-600 mt-1">{errors.email}</p>}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-slate-500" />
-                      <span className="text-slate-900">{profile.email}</span>
-                    </div>
-                  )}
-                </div>
 
                 {/* Phone */}
                 <div className="space-y-1">
