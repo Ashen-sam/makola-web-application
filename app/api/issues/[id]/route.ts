@@ -23,7 +23,22 @@ export async function GET(
     const { data: issue, error: issueError } = await supabase
       .from('issues')
       .select(`
-        *,
+        issue_id,
+        title,
+        photos,
+        category,
+        description,
+        status,
+        priority,
+        created_date,
+        vote_count,
+        location,
+        latitude,
+        longitude,
+        date_observed,
+        time_observed,
+        user_id,
+        resident_id,
         residents (
           resident_id,
           name,
@@ -42,7 +57,11 @@ export async function GET(
     const { data: comments, error: commentsError } = await supabase
       .from('comments')
       .select(`
-        *,
+        comment_id,
+        content,
+        created_at,
+        user_id,
+        issue_id,
         users (
           username,
           role
@@ -55,8 +74,14 @@ export async function GET(
       return NextResponse.json({ error: 'Failed to fetch comments' }, { status: 500 });
     }
 
+    // Calculate comment count
+    const commentCount = comments ? comments.length : 0;
+
     return NextResponse.json({
-      issue,
+      issue: {
+        ...issue,
+        comment_count: commentCount
+      },
       comments: comments || []
     });
 
@@ -83,11 +108,13 @@ export async function PUT(
     
     const { 
       title, 
-      photo, 
+      photos, 
       category, 
       description, 
       priority,
       location,
+      latitude,
+      longitude,
       date_observed,
       time_observed,
       status,
@@ -97,6 +124,26 @@ export async function PUT(
 
     if (isNaN(issueId)) {
       return NextResponse.json({ error: 'Invalid issue ID' }, { status: 400 });
+    }
+
+    // Validate photos array if provided
+    if (photos && Array.isArray(photos)) {
+      if (photos.length > 4) {
+        return NextResponse.json(
+          { error: "Maximum 4 photos allowed" },
+          { status: 400 }
+        );
+      }
+      
+      // Validate each photo URL
+      for (const photoUrl of photos) {
+        if (typeof photoUrl !== 'string' || !photoUrl.trim()) {
+          return NextResponse.json(
+            { error: "All photo URLs must be valid strings" },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     // Get the current issue to check ownership
@@ -136,11 +183,13 @@ export async function PUT(
     const updateData: any = {};
     
     if (title !== undefined) updateData.title = title;
-    if (photo !== undefined) updateData.photo = photo;
+    if (photos !== undefined) updateData.photos = JSON.stringify(photos);
     if (category !== undefined) updateData.category = category;
     if (description !== undefined) updateData.description = description;
     if (priority !== undefined) updateData.priority = priority;
     if (location !== undefined) updateData.location = location;
+    if (latitude !== undefined) updateData.latitude = latitude;
+    if (longitude !== undefined) updateData.longitude = longitude;
     if (date_observed !== undefined) updateData.date_observed = date_observed;
     if (time_observed !== undefined) updateData.time_observed = time_observed;
     
@@ -154,7 +203,22 @@ export async function PUT(
       .update(updateData)
       .eq('issue_id', issueId)
       .select(`
-        *,
+        issue_id,
+        title,
+        photos,
+        category,
+        description,
+        status,
+        priority,
+        created_date,
+        vote_count,
+        location,
+        latitude,
+        longitude,
+        date_observed,
+        time_observed,
+        user_id,
+        resident_id,
         residents (
           name,
           address,
@@ -178,7 +242,7 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete issue
+// DELETE - Delete issue (unchanged from your original)
 export async function DELETE(
   request: NextRequest,
   context: { params: { id: string } }
