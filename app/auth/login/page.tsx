@@ -67,7 +67,6 @@ export default function LoginPage() {
         password: formData.password,
       }).unwrap()
 
-      console.log("User login successful:", response)
 
       // Store user data in localStorage or context/state management
       localStorage.setItem('user', JSON.stringify(response.user))
@@ -86,7 +85,6 @@ export default function LoginPage() {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
-      console.error("Login error:", error)
 
       // Handle different types of errors with toast
       if (error?.data?.message) {

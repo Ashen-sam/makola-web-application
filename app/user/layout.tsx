@@ -1,5 +1,4 @@
 "use client"
-
 import type React from "react"
 import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
@@ -12,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Home, Plus, User, LogOut, Bell, BarChart3, MapPin } from "lucide-react"
+import { Home, Plus, User, LogOut, BarChart3, MapPin } from "lucide-react"
 import LoadingScreen from "../../components/loading-screen"
 
 interface UserLayoutProps {
@@ -35,20 +34,30 @@ export default function UserLayout({ children }: UserLayoutProps) {
   const [showLoading, setShowLoading] = useState(false)
   const [user, setUser] = useState<UserData | null>(null)
 
-  useEffect(() => {
-    console.log("User Layout initialized")
+  console.log(user, "User data in UserLayout")
 
-    // Get user data from localStorage
+  useEffect(() => {
+    console.log("User Layout initialized");
+
     try {
-      const userData = localStorage.getItem('user')
+      const userData = localStorage.getItem("user");
       if (userData) {
-        const parsedUser = JSON.parse(userData)
-        setUser(parsedUser)
+        const parsedUser = JSON.parse(userData);
+
+        // Split username if firstName and lastName are missing
+        if (!parsedUser.firstName && !parsedUser.lastName && parsedUser.username) {
+          const nameParts = parsedUser.username.trim().split(" ");
+          parsedUser.firstName = nameParts[0];
+          parsedUser.lastName = nameParts.slice(1).join(" ");
+        }
+
+        setUser(parsedUser);
       }
     } catch (error) {
-      console.error("Error parsing user data from localStorage:", error)
+      console.error("Error parsing user data from localStorage:", error);
     }
-  }, [])
+  }, []);
+
 
   const navItems = [
     { id: "feed", label: "Feed", icon: Home, path: "/user/feed" },
@@ -67,7 +76,7 @@ export default function UserLayout({ children }: UserLayoutProps) {
     // Simulate logout process
     setTimeout(() => {
       console.log("User signed out - redirecting to landing page")
-      router.push("/")
+      router.push("/auth/login")
     }, 2500)
   }
 
@@ -75,23 +84,6 @@ export default function UserLayout({ children }: UserLayoutProps) {
     router.push(path)
   }
 
-  // Helper function to get display name
-  const getDisplayName = () => {
-    if (!user) return "User"
-
-    // If firstName and lastName are available, use them
-    if (user.firstName && user.lastName) {
-      return `${user.firstName} ${user.lastName}`
-    }
-
-    // If firstName is available, use it
-    if (user.firstName) {
-      return user.firstName
-    }
-
-    // Otherwise, use username
-    return user.username
-  }
 
   // Helper function to get initials for avatar
   const getInitials = () => {
@@ -150,33 +142,43 @@ export default function UserLayout({ children }: UserLayoutProps) {
                 })}
               </nav>
 
-              {/* User Menu */}
-              <div className="flex items-center gap-3">
-                <Button variant="ghost" size="sm" className="relative hover:scale-110 transition-transform">
-                  <Bell className="h-5 w-5 text-slate-600" />
-                  {notifications > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                      {notifications}
-                    </span>
-                  )}
-                </Button>
-
+              {/* User Menu with Notification Badge */}
+              <div className="flex items-center">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="flex items-center gap-2 p-2 hover:scale-105 transition-transform"
+                      className="flex items-center gap-2 p-2 hover:scale-105 transition-transform relative"
                     >
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                        <AvatarFallback className="bg-emerald-100 text-emerald-700">
-                          {getInitials()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="hidden md:block text-slate-700">{getDisplayName()}</span>
+                      <div className="relative">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src="/placeholder.svg?height=32&width=32" />
+                          <AvatarFallback className="bg-emerald-100 text-emerald-700">
+                            {getInitials()}
+                          </AvatarFallback>
+                        </Avatar>
+                        {notifications > 0 && (
+                          <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center border-2 border-white shadow-sm">
+                            {notifications > 99 ? '99+' : notifications}
+                          </div>
+                        )}
+                      </div>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
+                    {notifications > 0 && (
+                      <>
+                        <DropdownMenuItem className="text-emerald-600 font-medium">
+                          <div className="flex items-center justify-between w-full">
+                            <span>Notifications</span>
+                            <span className="bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full">
+                              {notifications}
+                            </span>
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
                     <DropdownMenuItem onClick={() => handleNavigation("/user/profile")}>
                       <User className="h-4 w-4 mr-2" />
                       Profile
@@ -216,7 +218,6 @@ export default function UserLayout({ children }: UserLayoutProps) {
           </div>
         </header>
 
-        {/* Main Content */}
         <main className="max-w-6xl mx-auto px-4 py-6">{children}</main>
       </div>
     </>

@@ -8,9 +8,10 @@ interface Resident {
   resident_id?: number;
 }
 
-interface User {
+export interface User {
   role: "resident" | "urban_councilor";
   username: string;
+  user_id?: number | string;
 }
 
 interface Comment {
@@ -19,11 +20,12 @@ interface Comment {
   created_at: string;
   user_id: number;
   issue_id: number;
-  sers: User;
+  users: User;
 }
 
 export interface Issue {
   issue_id: number;
+  photos: string[];
   title: string;
   photo: string | null;
   category: string;
@@ -41,6 +43,9 @@ export interface Issue {
   comments?: Comment[];
   latitude?: number;
   longitude?: number;
+  comment_count?: number;
+  users: User;
+  user_id: number; // Optional comment count
 }
 
 interface CreateIssueRequest {
@@ -58,7 +63,7 @@ interface CreateIssueRequest {
   longitude?: number;
 }
 
-interface UpdateIssueRequest {
+export interface UpdateIssueRequest {
   title?: string;
   description?: string;
   category?: string;
@@ -71,6 +76,7 @@ interface UpdateIssueRequest {
   role: "resident" | "urban_councilor";
   latitude?: number;
   longitude?: number;
+  photos?: string[];
 }
 
 // Location validation types
@@ -141,12 +147,15 @@ interface GetIssuesParams {
 
 interface CreateCommentRequest {
   content: string;
-  user_id: number;
+  user_id: number | string;
 }
 
 interface CreateCommentResponse {
   message: string;
   comment: Comment;
+}
+interface GetIssuesByUserIdParams extends GetIssuesParams {
+  userId: number;
 }
 
 // Issues API with injected endpoints
@@ -437,6 +446,28 @@ export const issuesApi = baseApi.injectEndpoints({
         "Issues",
       ],
     }),
+    getIssuesByUserId: builder.query<
+      GetIssuesResponse,
+      GetIssuesByUserIdParams
+    >({
+      query: ({ userId, ...params }) => {
+        const searchParams = new URLSearchParams();
+
+        if (params.page) searchParams.append("page", params.page.toString());
+        if (params.limit) searchParams.append("limit", params.limit.toString());
+        if (params.category) searchParams.append("category", params.category);
+        if (params.status) searchParams.append("status", params.status);
+        if (params.priority) searchParams.append("priority", params.priority);
+
+        return {
+          url: `issues/user/${userId}${
+            searchParams.toString() ? `?${searchParams.toString()}` : ""
+          }`,
+          method: "GET",
+        };
+      },
+      providesTags: ["Issues"],
+    }),
   }),
   overrideExisting: false,
 });
@@ -462,4 +493,5 @@ export const {
   useValidateLocationMutation,
   useGetMakolaBoundariesQuery,
   useGetIssuesByLocationQuery,
+  useGetIssuesByUserIdQuery,
 } = issuesApi;

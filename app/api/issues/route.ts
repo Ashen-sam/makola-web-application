@@ -10,13 +10,11 @@ const MAKOLA_BOUNDARIES = {
 };
 
 function formatToLocalTime(utcDateStr: string): string {
-  return DateTime
-    .fromISO(utcDateStr, { zone: 'utc' })
-    .setZone('Asia/Colombo')
-    .toFormat('yyyy-MM-dd HH:mm:ss');
+  return DateTime.fromISO(utcDateStr, { zone: "utc" })
+    .setZone("Asia/Colombo")
+    .toFormat("yyyy-MM-dd HH:mm:ss");
 }
 
-// Function to validate if coordinates are within Makola area
 function isWithinMakolaBoundaries(lat: number, lng: number): boolean {
   return (
     lat >= MAKOLA_BOUNDARIES.south &&
@@ -26,7 +24,6 @@ function isWithinMakolaBoundaries(lat: number, lng: number): boolean {
   );
 }
 
-// GET - Get all issues (both residents and admin can access)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -58,6 +55,9 @@ export async function GET(request: NextRequest) {
         date_observed,
         time_observed,
         user_id,
+        users (
+          username
+        ),
         resident_id,
         residents (
           name,
@@ -94,10 +94,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Get comment counts for all issues
-    let processedIssues = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let processedIssues: any[] = [];
     if (issues && issues.length > 0) {
-      const issueIds = issues.map(issue => issue.issue_id);
-      
+      const issueIds = issues.map((issue) => issue.issue_id);
+
       // Get comment counts for these issues
       const { data: commentCounts, error: commentError } = await supabase
         .from("comments")
@@ -107,21 +108,22 @@ export async function GET(request: NextRequest) {
       if (commentError) {
         console.error("Comment count error:", commentError);
         // If comment counting fails, still return issues without comment count
-        processedIssues = issues.map(issue => ({
+        processedIssues = issues.map((issue) => ({
           ...issue,
-          comment_count: 0
+          comment_count: 0,
         }));
       } else {
         // Count comments per issue
         const commentCountMap: { [key: number]: number } = {};
-        commentCounts?.forEach(comment => {
-          commentCountMap[comment.issue_id] = (commentCountMap[comment.issue_id] || 0) + 1;
+        commentCounts?.forEach((comment) => {
+          commentCountMap[comment.issue_id] =
+            (commentCountMap[comment.issue_id] || 0) + 1;
         });
 
         // Add comment count to each issue
-        processedIssues = issues.map(issue => ({
+        processedIssues = issues.map((issue) => ({
           ...issue,
-          comment_count: commentCountMap[issue.issue_id] || 0
+          comment_count: commentCountMap[issue.issue_id] || 0,
         }));
       }
     }
@@ -139,9 +141,9 @@ export async function GET(request: NextRequest) {
 
     const { count } = await countQuery;
 
-    const formattedAndProcessedIssues = processedIssues.map(issue => ({
+    const formattedAndProcessedIssues = processedIssues.map((issue) => ({
       ...issue,
-      created_date: formatToLocalTime(issue.created_date)
+      created_date: formatToLocalTime(issue.created_date),
     }));
 
     return NextResponse.json({
@@ -162,12 +164,12 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create new issue (only residents can create)
+// POST - Create new issue (updated to save both user_id and resident_id)
 export async function POST(request: NextRequest) {
   try {
     const {
       title,
-      photos = [], 
+      photos = [],
       category,
       description,
       priority = "medium",
@@ -199,10 +201,10 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      
+
       // Validate each photo URL
       for (const photoUrl of photos) {
-        if (typeof photoUrl !== 'string' || !photoUrl.trim()) {
+        if (typeof photoUrl !== "string" || !photoUrl.trim()) {
           return NextResponse.json(
             { error: "All photo URLs must be valid strings" },
             { status: 400 }
@@ -248,7 +250,6 @@ export async function POST(request: NextRequest) {
 
     const issueData = {
       title,
-      // photos: JSON.stringify(photos), // Store as JSON
       photos,
       category,
       description,
@@ -258,7 +259,8 @@ export async function POST(request: NextRequest) {
       longitude,
       date_observed,
       time_observed,
-      resident_id: resident.resident_id,
+      user_id: user_id, // Save user_id
+      resident_id: resident.resident_id, // Save resident_id
       status: "open",
       vote_count: 0,
       // created_date will be automatically set by DEFAULT CURRENT_TIMESTAMP

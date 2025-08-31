@@ -293,14 +293,14 @@ export default function RegisterPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="username" className="text-slate-700 font-medium">
+                    <Label htmlFor="" className="text-slate-700 font-medium">
                       Username
                     </Label>
                     <Input
                       id="username"
                       type="text"
                       value={formData.username}
-                      onChange={(e) => handleInputChange("username", e.target.value.toLowerCase())}
+                      onChange={(e) => handleInputChange("username", e.target.value)}
                       className={`h-12 ${errors.username ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"} focus:ring-2 focus:ring-emerald-500/20`}
                       placeholder="Enter your username"
                       disabled={isLoading}

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabaseClient"
-import { AlertTriangle, Calendar, Camera, Clock, Upload } from "lucide-react"
+import { AlertTriangle, Calendar, Camera, Clock, Upload, X } from "lucide-react"
 import Image from "next/image"
 import type React from "react"
 import { useEffect, useState } from "react"
@@ -18,13 +18,13 @@ interface FormData {
   title: string
   description: string
   location: string
-  latitude?: number // Changed from coordinates to latitude/longitude
+  latitude?: number
   longitude?: number
   date: string
   time: string
   priority: "low" | "medium" | "high"
   category: string
-  photo: File | null
+  photos: File[]
 }
 
 interface FormErrors {
@@ -35,13 +35,19 @@ interface FormErrors {
   time?: string
   priority?: string
   category?: string
-  photo?: string
+  photos?: string
 }
 
 interface User {
   user_id: number
   role: "resident" | "urban_councilor"
   username: string
+}
+
+interface PhotoPreview {
+  file: File
+  preview: string
+  id: string
 }
 
 export default function ReportIssue() {
@@ -55,16 +61,17 @@ export default function ReportIssue() {
     time: "",
     priority: "medium" as const,
     category: "",
-    photo: null,
+    photos: [],
   })
 
   const [errors, setErrors] = useState<FormErrors>({})
   const [isLoading, setIsLoading] = useState(false)
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [photoPreviews, setPhotoPreviews] = useState<PhotoPreview[]>([])
   const [uploadProgress, setUploadProgress] = useState<number>(0)
   const [user, setUser] = useState<User | null>(null)
 
-  // RTK Query mutation hook
+  const MAX_PHOTOS = 5
+  const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 
   // Get user data from localStorage on component mount
   useEffect(() => {
@@ -171,72 +178,122 @@ export default function ReportIssue() {
     }
   }
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error("Photo size must be less than 5MB")
-        setErrors((prev) => ({ ...prev, photo: "Photo size must be less than 5MB" }))
-        return
+  const handlePhotosUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+
+    if (files.length === 0) return
+
+    // Check if adding these files would exceed the maximum
+    if (photoPreviews.length + files.length > MAX_PHOTOS) {
+      toast.error(`You can only upload up to ${MAX_PHOTOS} photos`)
+      return
+    }
+
+    const validFiles: File[] = []
+    // const newPreviews: PhotoPreview[] = []
+
+    for (const file of files) {
+      // Validate file size
+      if (file.size > MAX_FILE_SIZE) {
+        toast.error(`${file.name} is too large. Maximum size is 5MB`)
+        continue
       }
 
+      // Validate file type
       if (!file.type.startsWith('image/')) {
-        toast.error("Please select a valid image file")
-        setErrors((prev) => ({ ...prev, photo: "Please select a valid image file" }))
-        return
+        toast.error(`${file.name} is not a valid image file`)
+        continue
       }
 
-      setFormData((prev) => ({ ...prev, photo: file }))
-      setErrors((prev) => ({ ...prev, photo: undefined }))
+      validFiles.push(file)
 
+      // Create preview
       const reader = new FileReader()
+      const id = Math.random().toString(36).substring(2)
+
       reader.onload = (e) => {
-        setPhotoPreview(e.target?.result as string)
+        const preview: PhotoPreview = {
+          file,
+          preview: e.target?.result as string,
+          id
+        }
+
+        setPhotoPreviews(prev => [...prev, preview])
       }
       reader.readAsDataURL(file)
-
-      toast.success("Photo uploaded successfully")
     }
+
+    if (validFiles.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        photos: [...prev.photos, ...validFiles]
+      }))
+
+      setErrors(prev => ({ ...prev, photos: undefined }))
+      toast.success(`${validFiles.length} photo(s) uploaded successfully`)
+    }
+
+    // Reset the input
+    e.target.value = ''
   }
 
-  const uploadPhotoToSupabase = async (file: File): Promise<string | null> => {
-    try {
-      const fileExt = file.name.split('.').pop()
-      const timestamp = Date.now()
-      const randomString = Math.random().toString(36).substring(2)
-      const fileName = `${timestamp}-${randomString}.${fileExt}`
-      const filePath = `${fileName}`
+  const removePhoto = (id: string) => {
+    const previewToRemove = photoPreviews.find(p => p.id === id)
+    if (!previewToRemove) return
 
-      setUploadProgress(25)
+    setPhotoPreviews(prev => prev.filter(p => p.id !== id))
+    setFormData(prev => ({
+      ...prev,
+      photos: prev.photos.filter(photo => photo !== previewToRemove.file)
+    }))
+  }
 
-      const { data, error } = await supabase.storage
-        .from('issue-photos')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false
-        })
+  const uploadPhotosToSupabase = async (files: File[]): Promise<string[]> => {
+    const uploadedUrls: string[] = []
+    const totalFiles = files.length
 
-      setUploadProgress(75)
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
 
-      if (error) {
-        console.error('Error uploading photo:', error)
-        throw new Error(`Upload failed: ${error.message}`)
+      try {
+        const fileExt = file.name.split('.').pop()
+        const timestamp = Date.now()
+        const randomString = Math.random().toString(36).substring(2)
+        const fileName = `${timestamp}-${randomString}-${i + 1}.${fileExt}`
+        const filePath = `${fileName}`
+
+        // Update progress
+        const baseProgress = 25 + (i / totalFiles) * 50
+        setUploadProgress(baseProgress)
+
+        const { data, error } = await supabase.storage
+          .from('issue-photos')
+          .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: false
+          })
+
+        if (error) {
+          console.error(`Error uploading photo ${i + 1}:`, error)
+          throw new Error(`Upload failed for ${file.name}: ${error.message}`)
+        }
+
+        console.log(`Upload ${i + 1} successful:`, data)
+
+        const { data: publicUrlData } = supabase.storage
+          .from('issue-photos')
+          .getPublicUrl(data.path)
+
+        uploadedUrls.push(publicUrlData.publicUrl)
+
+      } catch (error) {
+        console.error(`Photo upload error for file ${i + 1}:`, error)
+        throw error
       }
-
-      console.log('Upload successful:', data)
-
-      const { data: publicUrlData } = supabase.storage
-        .from('issue-photos')
-        .getPublicUrl(data.path)
-
-      setUploadProgress(100)
-      return publicUrlData.publicUrl
-
-    } catch (error) {
-      console.error('Photo upload error:', error)
-      setUploadProgress(0)
-      throw error
     }
+
+    setUploadProgress(75)
+    return uploadedUrls
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -260,12 +317,12 @@ export default function ReportIssue() {
     const loadingToast = toast.loading("Submitting your issue report...")
 
     try {
-      let photoUrl: string | null = null
+      let photoUrls: string[] = []
 
-      if (formData.photo) {
+      if (formData.photos.length > 0) {
         setUploadProgress(10)
-        toast.loading("Uploading photo...", { id: loadingToast })
-        photoUrl = await uploadPhotoToSupabase(formData.photo)
+        toast.loading(`Uploading ${formData.photos.length} photo(s)...`, { id: loadingToast })
+        photoUrls = await uploadPhotosToSupabase(formData.photos)
       }
 
       // Prepare issue data according to your backend API structure
@@ -275,13 +332,13 @@ export default function ReportIssue() {
         category: formData.category,
         priority: formData.priority,
         location: formData.location.trim(),
-        latitude: formData.latitude, // Send latitude and longitude separately
+        latitude: formData.latitude,
         longitude: formData.longitude,
         date_observed: formData.date,
         time_observed: formData.time,
         user_id: user.user_id,
         role: user.role,
-        ...(photoUrl && { photo: photoUrl })
+        ...(photoUrls.length > 0 && { photos: photoUrls })
       }
 
       console.log('Submitting issue data:', issueData)
@@ -320,9 +377,9 @@ export default function ReportIssue() {
         time: "",
         priority: "medium",
         category: "",
-        photo: null,
+        photos: [],
       })
-      setPhotoPreview(null)
+      setPhotoPreviews([])
       setErrors({})
       setUploadProgress(0)
 
@@ -383,7 +440,7 @@ export default function ReportIssue() {
               <div className="flex justify-between text-sm text-slate-600 mb-1">
                 <span>
                   {uploadProgress < 25 ? 'Preparing...' :
-                    uploadProgress < 75 ? 'Uploading photo...' :
+                    uploadProgress < 75 ? `Uploading ${formData.photos.length} photo(s)...` :
                       uploadProgress < 100 ? 'Processing...' : 'Submitting issue...'}
                 </span>
                 <span>{Math.round(uploadProgress)}%</span>
@@ -539,54 +596,70 @@ export default function ReportIssue() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="photo" className="text-slate-700 font-medium">
-                  Photo (Optional)
+                <Label htmlFor="photos" className="text-slate-700 font-medium">
+                  Photos (Optional - Up to {MAX_PHOTOS})
                 </Label>
+
+                {/* Photo Upload Area */}
                 <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:border-emerald-400 transition-colors min-h-[140px] flex items-center justify-center">
-                  {photoPreview ? (
-                    <div className="space-y-3 w-full">
-                      <Image
-                        src={photoPreview}
-                        alt="Preview"
-                        className="max-h-24 mx-auto rounded-lg object-cover"
-                        width={96}
-                        height={96}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setPhotoPreview(null)
-                          setFormData((prev) => ({ ...prev, photo: null }))
-                        }}
-                        disabled={isLoading}
-                      >
-                        Remove Photo
-                      </Button>
-                    </div>
-                  ) : (
+                  {photoPreviews.length === 0 ? (
                     <div className="space-y-2">
                       <Camera className="h-8 w-8 text-slate-400 mx-auto" />
                       <div>
-                        <Label htmlFor="photo" className="cursor-pointer">
+                        <Label htmlFor="photos" className="cursor-pointer">
                           <span className="text-emerald-600 hover:text-emerald-700 font-medium">Click to upload</span>
                           <span className="text-slate-600"> or drag and drop</span>
                         </Label>
-                        <p className="text-xs text-slate-500 mt-1">PNG, JPG up to 5MB</p>
+                        <p className="text-xs text-slate-500 mt-1">PNG, JPG up to 5MB each (max {MAX_PHOTOS} photos)</p>
                       </div>
                     </div>
+                  ) : (
+                    <div className="w-full">
+                      <Label htmlFor="photos" className="cursor-pointer text-emerald-600 hover:text-emerald-700 font-medium text-sm">
+                        + Add more photos ({photoPreviews.length}/{MAX_PHOTOS})
+                      </Label>
+                    </div>
                   )}
+
                   <Input
-                    id="photo"
+                    id="photos"
                     type="file"
                     accept="image/*"
-                    onChange={handlePhotoUpload}
+                    multiple
+                    onChange={handlePhotosUpload}
                     className="hidden"
-                    disabled={isLoading}
+                    disabled={isLoading || photoPreviews.length >= MAX_PHOTOS}
                   />
                 </div>
-                {errors.photo && <p className="text-sm text-red-600">{errors.photo}</p>}
+
+                {/* Photo Previews */}
+                {photoPreviews.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    {photoPreviews.map((preview) => (
+                      <div key={preview.id} className="relative group">
+                        <Image
+                          src={preview.preview}
+                          alt={`Preview ${preview.id}`}
+                          className="w-full h-20 object-cover rounded-lg border"
+                          width={80}
+                          height={80}
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="absolute -top-1 -right-1 h-6 w-6 rounded-full p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => removePhoto(preview.id)}
+                          disabled={isLoading}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {errors.photos && <p className="text-sm text-red-600">{errors.photos}</p>}
               </div>
             </div>
 
@@ -599,7 +672,10 @@ export default function ReportIssue() {
                 {isLoading ? (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    {uploadProgress > 0 && uploadProgress < 100 ? 'Uploading...' : 'Submitting Issue...'}
+                    {uploadProgress > 0 && uploadProgress < 100 ?
+                      `Uploading ${formData.photos.length} photo(s)...` :
+                      'Submitting Issue...'
+                    }
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
