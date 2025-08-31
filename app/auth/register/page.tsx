@@ -293,14 +293,14 @@ export default function RegisterPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="username" className="text-slate-700 font-medium">
+                    <Label htmlFor="" className="text-slate-700 font-medium">
                       Username
                     </Label>
                     <Input
                       id="username"
                       type="text"
                       value={formData.username}
-                      onChange={(e) => handleInputChange("username", e.target.value.toLowerCase())}
+                      onChange={(e) => handleInputChange("username", e.target.value)}
                       className={`h-12 ${errors.username ? "border-red-300 focus:border-red-500" : "border-slate-300 focus:border-emerald-500"} focus:ring-2 focus:ring-emerald-500/20`}
                       placeholder="Enter your username"
                       disabled={isLoading}
@@ -422,9 +422,12 @@ export default function RegisterPage() {
                   className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-medium transition-all duration-200 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-lg hover:shadow-xl"
                 >
                   {isLoading ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Creating Account...
+                    <div className="flex items-center gap-3 ">
+                      <div className="flex gap-1">
+                        <div className="w-2 h-2 bg-white rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                        <div className="w-2 h-2 bg-white rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                        <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
+                      </div>
                     </div>
                   ) : (
                     "Create Account"

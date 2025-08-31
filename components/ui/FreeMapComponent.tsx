@@ -126,16 +126,16 @@ const FreeMapComponent: React.FC<FreeMapComponentProps> = ({
       }).addTo(map);
 
       // Draw Makola area polygon
-      const polygon = L.polygon(
-        makolaArea.polygon.map(point => [point.lat, point.lng]),
-        {
-          color: '#10b981',
-          weight: 2,
-          opacity: 0.8,
-          fillColor: '#10b981',
-          fillOpacity: 0.1,
-        }
-      ).addTo(map);
+      // const polygon = L.polygon(
+      //   makolaArea.polygon.map(point => [point.lat, point.lng]),
+      //   {
+      //     color: '#10b981',
+      //     weight: 2,
+      //     opacity: 0.8,
+      //     fillColor: '#10b981',
+      //     fillOpacity: 0.1,
+      //   }
+      // ).addTo(map);
 
       // Add click handler
       map.on('click', async (e: any) => {
@@ -155,7 +155,9 @@ const FreeMapComponent: React.FC<FreeMapComponentProps> = ({
       setMapError('Failed to initialize map');
       setIsLoading(false);
     }
-  }, [leafletLoaded, makolaArea, disabled]);
+  }, [leafletLoaded, makolaArea, disabled
+
+  ]);
 
   const validateLocation = async (lat: number, lng: number): Promise<boolean> => {
     try {
