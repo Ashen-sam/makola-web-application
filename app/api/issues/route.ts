@@ -24,6 +24,7 @@ function isWithinMakolaBoundaries(lat: number, lng: number): boolean {
   );
 }
 
+// GET - Get all issues (can be used by admin)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -94,12 +95,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Get comment counts for all issues
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let processedIssues: any[] = [];
     if (issues && issues.length > 0) {
       const issueIds = issues.map((issue) => issue.issue_id);
 
-      // Get comment counts for these issues
       const { data: commentCounts, error: commentError } = await supabase
         .from("comments")
         .select("issue_id")
@@ -107,20 +106,17 @@ export async function GET(request: NextRequest) {
 
       if (commentError) {
         console.error("Comment count error:", commentError);
-        // If comment counting fails, still return issues without comment count
         processedIssues = issues.map((issue) => ({
           ...issue,
           comment_count: 0,
         }));
       } else {
-        // Count comments per issue
         const commentCountMap: { [key: number]: number } = {};
         commentCounts?.forEach((comment) => {
           commentCountMap[comment.issue_id] =
             (commentCountMap[comment.issue_id] || 0) + 1;
         });
 
-        // Add comment count to each issue
         processedIssues = issues.map((issue) => ({
           ...issue,
           comment_count: commentCountMap[issue.issue_id] || 0,
@@ -164,7 +160,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create new issue (updated to save both user_id and resident_id)
+// POST - Create new issue (updated for admin to use user_id directly)
 export async function POST(request: NextRequest) {
   try {
     const {
@@ -183,12 +179,9 @@ export async function POST(request: NextRequest) {
     } = await request.json();
 
     // Validate required fields
-    if (!title || !category || !user_id || role !== "resident") {
+    if (!title || !category || !user_id) {
       return NextResponse.json(
-        {
-          error:
-            'Title, category, user_id, and role as "resident" are required',
-        },
+        { error: "Title, category, and user_id are required" },
         { status: 400 }
       );
     }
@@ -202,7 +195,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Validate each photo URL
       for (const photoUrl of photos) {
         if (typeof photoUrl !== "string" || !photoUrl.trim()) {
           return NextResponse.json(
@@ -222,7 +214,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Check if coordinates are within Makola boundaries
       if (!isWithinMakolaBoundaries(latitude, longitude)) {
         return NextResponse.json(
           {
@@ -234,18 +225,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Map user_id to resident_id
-    const { data: resident, error: residentError } = await supabase
-      .from("residents")
-      .select("resident_id")
-      .eq("user_id", user_id)
-      .single();
+    let resident_id = null;
 
-    if (residentError || !resident) {
-      return NextResponse.json(
-        { error: "Resident not found for given user_id" },
-        { status: 400 }
-      );
+    // For admin creating issue, user_id is passed directly and no resident_id needed
+    // For resident creating issue, map user_id to resident_id
+    if (role === "resident") {
+      const { data: resident, error: residentError } = await supabase
+        .from("residents")
+        .select("resident_id")
+        .eq("user_id", user_id)
+        .single();
+
+      if (residentError || !resident) {
+        return NextResponse.json(
+          { error: "Resident not found for given user_id" },
+          { status: 400 }
+        );
+      }
+      resident_id = resident.resident_id;
     }
 
     const issueData = {
@@ -259,11 +256,10 @@ export async function POST(request: NextRequest) {
       longitude,
       date_observed,
       time_observed,
-      user_id: user_id, // Save user_id
-      resident_id: resident.resident_id, // Save resident_id
+      user_id: user_id,
+      resident_id: resident_id, // null for admin, actual resident_id for residents
       status: "open",
       vote_count: 0,
-      // created_date will be automatically set by DEFAULT CURRENT_TIMESTAMP
     };
 
     const { data: issue, error: issueError } = await supabase

@@ -39,7 +39,7 @@ export interface Issue {
   location: string | null;
   date_observed: string | null;
   time_observed: string | null;
-  residents: Resident;
+  residents?: Resident;
   comments?: Comment[];
   latitude?: number;
   longitude?: number;
