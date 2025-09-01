@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
 
-// GET - Get issue by ID with comments
+// GET - Get issue by ID with comments (unchanged, admin can use this)
 export async function GET(
   request: NextRequest,
   context: { params: { id: string } }
@@ -9,7 +9,6 @@ export async function GET(
   try {
     const params = await context.params;
 
-    // Extract ID from URL as fallback
     const url = new URL(request.url);
     const pathSegments = url.pathname.split("/");
     const idFromPath = pathSegments[pathSegments.length - 1];
@@ -81,7 +80,6 @@ export async function GET(
       );
     }
 
-    // Calculate comment count
     const commentCount = comments ? comments.length : 0;
 
     return NextResponse.json({
@@ -100,7 +98,7 @@ export async function GET(
   }
 }
 
-// PUT - Update issue
+// PUT - Update issue (modified for admin to edit any issue)
 export async function PUT(
   request: NextRequest,
   context: { params: { id: string } }
@@ -108,7 +106,6 @@ export async function PUT(
   try {
     const params = await context.params;
 
-    // Extract ID from URL as fallback
     const url = new URL(request.url);
     const pathSegments = url.pathname.split("/");
     const idFromPath = pathSegments[pathSegments.length - 1];
@@ -126,7 +123,6 @@ export async function PUT(
       longitude,
       date_observed,
       time_observed,
-      status,
       user_id,
       role,
     } = await request.json();
@@ -144,7 +140,6 @@ export async function PUT(
         );
       }
 
-      // Validate each photo URL
       for (const photoUrl of photos) {
         if (typeof photoUrl !== "string" || !photoUrl.trim()) {
           return NextResponse.json(
@@ -158,7 +153,7 @@ export async function PUT(
     // Get the current issue to check ownership
     const { data: currentIssue, error: currentIssueError } = await supabase
       .from("issues")
-      .select("resident_id")
+      .select("resident_id, user_id")
       .eq("issue_id", issueId)
       .single();
 
@@ -170,6 +165,7 @@ export async function PUT(
     let canUpdate = false;
 
     if (role === "urban_councilor") {
+      // Admin can edit any issue
       canUpdate = true;
     } else if (role === "resident") {
       // Check if the resident owns this issue
@@ -196,11 +192,9 @@ export async function PUT(
     }
 
     // Prepare update data
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: any = {};
 
     if (title !== undefined) updateData.title = title;
-    //if (photos !== undefined) updateData.photos = JSON.stringify(photos);
     if (photos !== undefined) updateData.photos = photos;
     if (category !== undefined) updateData.category = category;
     if (description !== undefined) updateData.description = description;
@@ -210,11 +204,6 @@ export async function PUT(
     if (longitude !== undefined) updateData.longitude = longitude;
     if (date_observed !== undefined) updateData.date_observed = date_observed;
     if (time_observed !== undefined) updateData.time_observed = time_observed;
-
-    // Only admin can update status
-    if (status !== undefined && role === "urban_councilor") {
-      updateData.status = status;
-    }
 
     const { data: updatedIssue, error: updateError } = await supabase
       .from("issues")
@@ -267,7 +256,7 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete issue (unchanged from your original)
+// DELETE - Delete issue (modified for admin to delete any issue)
 export async function DELETE(
   request: NextRequest,
   context: { params: { id: string } }
@@ -275,7 +264,6 @@ export async function DELETE(
   try {
     const params = await context.params;
 
-    // Extract ID from URL as fallback
     const url = new URL(request.url);
     const pathSegments = url.pathname.split("/");
     const idFromPath = pathSegments[pathSegments.length - 1];
@@ -302,6 +290,7 @@ export async function DELETE(
     let canDelete = false;
 
     if (role === "urban_councilor") {
+      // Admin can delete any issue
       canDelete = true;
     } else if (role === "resident") {
       // Check if the resident owns this issue

@@ -39,10 +39,13 @@ interface IssuePostProps {
   isLiked?: boolean
   isUpvoted: boolean
   issueId?: string | number
-  user?: string
+  // user?: string
   created_at?: string // New prop for creation date/time
   comment_count?: number
-  user_id?: number
+  user_id?: number,
+  user: {
+    username: string
+  };
 }
 
 export default function IssuePost({
