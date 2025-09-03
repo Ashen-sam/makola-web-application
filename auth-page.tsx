@@ -164,6 +164,7 @@ export default function AuthPage({ onLogin }: AuthPageProps) {
         }
       }
     } catch (error) {
+      console.error("Error during authentication:", error)
       setErrors({ general: "An error occurred. Please try again." })
       setIsLoading(false)
     }

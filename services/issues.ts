@@ -14,13 +14,16 @@ export interface User {
   user_id?: number | string;
 }
 
-interface Comment {
+// Updated Comment interface with replies support
+export interface Comment {
   comment_id: number;
   content: string;
   created_at: string;
   user_id: number;
   issue_id: number;
+  parent_comment_id: number | null;
   users: User;
+  replies?: Comment[]; // For nested replies
 }
 
 export interface Issue {
@@ -45,7 +48,9 @@ export interface Issue {
   longitude?: number;
   comment_count?: number;
   users: User;
-  user_id: number; // Optional comment count
+  user_id: number;
+  assigned_officer?: string;
+  assigned_department?: string; // Added for assigned officer
 }
 
 interface CreateIssueRequest {
@@ -77,6 +82,7 @@ export interface UpdateIssueRequest {
   latitude?: number;
   longitude?: number;
   photos?: string[];
+  assigned_officer?: string; // Added for assigned officer
 }
 
 // Location validation types
@@ -117,6 +123,19 @@ interface GetIssuesResponse {
   };
 }
 
+interface AssignDepartmentResponse {
+  message: string;
+  issue: Issue;
+  assigned_department: string;
+  notified_officers: number;
+}
+
+interface AssignDepartmentRequest {
+  department_name: string;
+  user_id: string;
+  role: string;
+}
+
 interface GetIssueByIdResponse {
   issue: Issue;
   comments: Comment[];
@@ -145,15 +164,55 @@ interface GetIssuesParams {
   priority?: "low" | "medium" | "high";
 }
 
+// Updated Comment Request Types
 interface CreateCommentRequest {
   content: string;
-  user_id: number | string;
+  user_id: number;
+  role: "resident" | "urban_councilor";
+  parent_comment_id?: number | null; // For replies
 }
 
-interface CreateCommentResponse {
+interface CreateReplyRequest {
+  content: string;
+  user_id: number;
+  role: "resident" | "urban_councilor";
+  parent_comment_id: number; // Required for replies
+}
+
+// Updated Comment Response Types
+export interface CreateCommentResponse {
+  message: string;
+  comment: Comment;
+  isReply: boolean;
+  parentCommentId?: number | null;
+}
+
+export interface GetCommentsResponse {
+  comments: Comment[];
+  total: number;
+  rootComments: number;
+}
+
+export interface UpdateCommentRequest {
+  content: string;
+  user_id: number;
+  role: "resident" | "urban_councilor";
+}
+
+export interface UpdateCommentResponse {
   message: string;
   comment: Comment;
 }
+
+export interface DeleteCommentRequest {
+  user_id: number;
+  role: "resident" | "urban_councilor";
+}
+
+export interface DeleteCommentResponse {
+  message: string;
+}
+
 interface GetIssuesByUserIdParams extends GetIssuesParams {
   userId: number;
 }
@@ -351,9 +410,45 @@ export const issuesApi = baseApi.injectEndpoints({
       providesTags: ["Issues"],
     }),
 
+    // ===== COMMENTS API ENDPOINTS =====
+
+    // GET - Get all comments for an issue (with nested replies)
+    getCommentsForIssue: builder.query<GetCommentsResponse, number>({
+      query: (issueId) => ({
+        url: `/issues/${issueId}/comments`,
+        method: "GET",
+      }),
+      transformResponse: (
+        response: GetCommentsResponse
+      ): GetCommentsResponse => {
+        console.log("Raw comments response:", response);
+        return response;
+      },
+      providesTags: (result, error, issueId) => [
+        { type: "Comments", id: `issue-${issueId}` },
+      ],
+    }),
+
+    // POST - Add a new comment to an issue (root comment)
     addCommentToIssue: builder.mutation<
       CreateCommentResponse,
       { issueId: number; data: CreateCommentRequest }
+    >({
+      query: ({ issueId, data }) => ({
+        url: `/issues/${issueId}/comments`,
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { issueId }) => [
+        { type: "Comments", id: `issue-${issueId}` },
+        { type: "Issues", id: issueId },
+      ],
+    }),
+
+    // POST - Add a reply to an existing comment
+    addReplyToComment: builder.mutation<
+      CreateCommentResponse,
+      { issueId: number; data: CreateReplyRequest }
     >({
       query: ({ issueId, data }) => ({
         url: `issues/${issueId}/comments`,
@@ -366,72 +461,77 @@ export const issuesApi = baseApi.injectEndpoints({
       ],
     }),
 
-    // FIXED: Updated to handle different response formats
-    getCommentsForIssue: builder.query<Comment[], number>({
-      query: (issueId) => ({
-        url: `issues/${issueId}/comments`,
-        method: "GET",
+    // PUT - Update a comment (only by the comment author)
+    updateComment: builder.mutation<
+      UpdateCommentResponse,
+      { commentId: number; data: UpdateCommentRequest }
+    >({
+      query: ({ commentId, data }) => ({
+        url: `/comments/${commentId}`,
+        method: "PUT",
+        body: data,
       }),
-      // Transform response to always return an array
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      transformResponse: (response: any): Comment[] => {
-        console.log("Raw comments response:", response);
-
-        // If response is already an array, return it
-        if (Array.isArray(response)) {
-          return response;
-        }
-
-        // If response has a comments property that's an array
-        if (
-          response &&
-          typeof response === "object" &&
-          Array.isArray(response.comments)
-        ) {
-          return response.comments;
-        }
-
-        // If response has a data property that's an array
-        if (
-          response &&
-          typeof response === "object" &&
-          Array.isArray(response.data)
-        ) {
-          return response.data;
-        }
-
-        // If response is an object but empty (like {}), return empty array
-        if (
-          response &&
-          typeof response === "object" &&
-          Object.keys(response).length === 0
-        ) {
-          console.log("Empty comments object, returning empty array");
-          return [];
-        }
-
-        // If response is an object with numeric keys (like {0: comment, 1: comment})
-        if (response && typeof response === "object") {
-          const values = Object.values(response);
-          if (
-            values.length > 0 &&
-            values.every(
-              (item) => item && typeof item === "object" && "comment_id" in item
-            )
-          ) {
-            return values as Comment[];
-          }
-        }
-
-        console.warn("Unexpected comments response format:", response);
-        return [];
-      },
-      providesTags: (result, error, issueId) => [
-        { type: "Comments", id: `issue-${issueId}` },
+      invalidatesTags: (result, error, { commentId }) => [
+        "Comments",
+        { type: "Comments", id: commentId },
+      ],
+    }),
+    updateIssueStatus: builder.mutation<
+      UpdateIssueResponse,
+      {
+        id: number;
+        status: "open" | "in_progress" | "closed" | "resolved";
+        user_id: number;
+        role: "resident" | "urban_councilor";
+      }
+    >({
+      query: ({ id, status, user_id, role }) => ({
+        url: `/issues/${id}/status`,
+        method: "PATCH",
+        body: {
+          status,
+          user_id,
+          role,
+        },
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "Issues", id },
+        { type: "Issues", id: "LIST" },
+        { type: "Stats", id: "LIST" },
       ],
     }),
 
-    // Update the existing getIssueById to include comments in response type
+    // DELETE - Delete a comment (by author or urban_councilor)
+    deleteComment: builder.mutation<
+      DeleteCommentResponse,
+      { commentId: number; data: DeleteCommentRequest }
+    >({
+      query: ({ commentId, data }) => ({
+        url: `/comments/${commentId}`,
+        method: "DELETE",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { commentId }) => [
+        "Comments",
+        { type: "Comments", id: commentId },
+      ],
+    }),
+    assignDepartment: builder.mutation<
+      AssignDepartmentResponse,
+      { issueId: number; departmentData: AssignDepartmentRequest }
+    >({
+      query: ({ issueId, departmentData }) => ({
+        url: `/issues/${issueId}/assign-department`,
+        method: "PATCH",
+        body: departmentData,
+      }),
+      invalidatesTags: (result, error, { issueId }) => [
+        { type: "Issue", id: issueId },
+        "Issue",
+      ],
+    }),
+
+    // Upvote issue
     upvoteIssue: builder.mutation<
       { message: string; vote_count: number },
       { issueId: number; data: { user_id: number; action: "upvote" } }
@@ -446,6 +546,8 @@ export const issuesApi = baseApi.injectEndpoints({
         "Issues",
       ],
     }),
+
+    // Get issues by user ID
     getIssuesByUserId: builder.query<
       GetIssuesResponse,
       GetIssuesByUserIdParams
@@ -474,6 +576,7 @@ export const issuesApi = baseApi.injectEndpoints({
 
 // Export hooks for usage in components
 export const {
+  // Issue hooks
   useGetIssuesQuery,
   useGetIssueByIdQuery,
   useCreateIssueMutation,
@@ -487,11 +590,17 @@ export const {
   useLazyGetIssuesByCategoryQuery,
   useLazyGetIssuesByStatusQuery,
   useLazyGetIssuesByPriorityQuery,
-  useAddCommentToIssueMutation,
-  useGetCommentsForIssueQuery,
   useUpvoteIssueMutation,
   useValidateLocationMutation,
   useGetMakolaBoundariesQuery,
   useGetIssuesByLocationQuery,
   useGetIssuesByUserIdQuery,
+  useUpdateIssueStatusMutation,
+  // Comment hooks
+  useGetCommentsForIssueQuery,
+  useAddCommentToIssueMutation,
+  useAddReplyToCommentMutation,
+  useUpdateCommentMutation,
+  useDeleteCommentMutation,
+  useAssignDepartmentMutation,
 } = issuesApi;

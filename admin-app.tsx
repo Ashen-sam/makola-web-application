@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
+import AdminDashboard from "./app/(admin)/dashboard/page"
+import AdminFeedPage from "./app/(admin)/issueList/page"
+import AdminSettings from "./app/(admin)/settings/page"
+import AdminUsers from "./app/(admin)/users/page"
 import AdminLayout from "./components/admin-layout"
-import AdminDashboard from "./pages/admin-dashboard"
-import AdminIssues from "./pages/admin-issues"
-import AdminUsers from "./pages/admin-users"
-import AdminSettings from "./pages/admin-settings"
 import LoadingScreen from "./components/loading-screen"
 
 export default function AdminApp() {
@@ -26,7 +26,7 @@ export default function AdminApp() {
       case "dashboard":
         return <AdminDashboard />
       case "issues":
-        return <AdminIssues />
+        return <AdminFeedPage />
       case "users":
         return <AdminUsers />
       case "settings":
