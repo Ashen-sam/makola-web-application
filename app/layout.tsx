@@ -1,8 +1,8 @@
-import type React from "react";
-import { Inter } from "next/font/google";
-import "./globals.css";
 import ReduxProvider from "@/store/ReduxProvider";
+import { Inter } from "next/font/google";
+import type React from "react";
 import { Toaster } from "react-hot-toast";
+import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 

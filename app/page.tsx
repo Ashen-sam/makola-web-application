@@ -7,11 +7,11 @@ export default function HomePage() {
   const router = useRouter()
 
   const handleLoginClick = () => {
-    router.push("/auth/login")
+    router.push("/login")
   }
 
   const handleTryNow = () => {
-    router.push("/auth/register")
+    router.push("/register")
   }
 
   return (
