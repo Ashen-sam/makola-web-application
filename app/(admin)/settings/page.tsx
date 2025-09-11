@@ -1,420 +1,535 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Settings, Bell, Shield, Database, Mail, Globe, Users, AlertTriangle, Save, RefreshCw } from "lucide-react"
+import {
+  User,
+  Camera,
+  Save,
+  RefreshCw,
+  Trash2,
+  Upload,
+  X,
+  AlertTriangle,
+  Loader2
+} from "lucide-react"
+import {
+  useGetProfileQuery,
+  useUpdateProfileMutation,
+  useDeleteProfileMutation,
+  useUploadProfilePictureMutation,
+  useRemoveProfilePictureMutation,
+  isUrbanCouncilorProfile,
+  type UrbanCouncilorProfile
+} from "@/services/profile"
 
-export default function AdminSettings() {
-  const [isLoading, setIsLoading] = useState(false)
-  const [settings, setSettings] = useState({
-    // General Settings
-    platformName: "Makola Community",
-    platformDescription: "Issue Reporting Platform for Makola Community",
-    contactEmail: "admin@makola.community",
-    maxFileSize: "5",
+interface UserData {
+  user_id: number
+  username: string
+  role: string
+  status: string
+}
 
-    // Notification Settings
-    emailNotifications: true,
-    pushNotifications: true,
-    adminAlerts: true,
-    weeklyReports: true,
+export default function UrbanCouncilorProfile() {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [userData, setUserData] = useState<UserData | null>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // Security Settings
-    requireEmailVerification: true,
-    enableTwoFactor: false,
-    sessionTimeout: "24",
-    maxLoginAttempts: "5",
+  // Get user data from localStorage on component mount
+  useEffect(() => {
+    try {
+      const storedUser = localStorage.getItem('user')
+      if (storedUser) {
+        const parsedUser: UserData = JSON.parse(storedUser)
 
-    // System Settings
-    maintenanceMode: false,
-    debugMode: false,
-    autoBackup: true,
-    backupFrequency: "daily",
+        // Validate that user is urban councilor
+        if (parsedUser.role !== 'urban_councilor') {
+          setAuthError('Access denied. This page is only for urban councilors.')
+          return
+        }
+
+        setUserData(parsedUser)
+      } else {
+        setAuthError('User not found. Please log in again.')
+      }
+    } catch (error) {
+      console.error('Error parsing user data from localStorage:', error)
+      setAuthError('Invalid user data. Please log in again.')
+    }
+  }, [])
+
+  // API Hooks - only call if we have valid user data
+  const {
+    data: profileData,
+    isLoading: isLoadingProfile,
+    error: profileError,
+    refetch: refetchProfile
+  } = useGetProfileQuery(
+    { user_id: userData?.user_id || 0 },
+    { skip: !userData?.user_id }
+  )
+
+  const [updateProfile, { isLoading: isUpdating }] = useUpdateProfileMutation()
+  const [deleteProfile, { isLoading: isDeleting }] = useDeleteProfileMutation()
+  const [uploadProfilePicture, { isLoading: isUploading }] = useUploadProfilePictureMutation()
+  const [removeProfilePicture, { isLoading: isRemoving }] = useRemoveProfilePictureMutation()
+
+  // Form state
+  const [formData, setFormData] = useState({
+    username: ""
   })
 
-  type SettingsKey = keyof typeof settings
-  type SettingsValue = string | boolean
+  // Update form data when profile loads
+  useEffect(() => {
+    if (profileData?.profile && isUrbanCouncilorProfile(profileData.profile)) {
+      setFormData({
+        username: profileData.profile.username
+      })
+    }
+  }, [profileData])
 
-  const handleSettingChange = (key: SettingsKey, value: SettingsValue) => {
-    setSettings((prev) => ({ ...prev, [key]: value }))
+  const profile = profileData?.profile as UrbanCouncilorProfile | undefined
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  const handleSave = async () => {
-    setIsLoading(true)
+  const handleProfilePictureUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !profile) return
+
+    // Validate file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("File size must be less than 5MB")
+      return
+    }
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert("Please select an image file")
+      return
+    }
+
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-      console.log("Settings saved:", settings)
-      alert("Settings saved successfully!")
-    } catch (error) {
-      console.log(error)
-      alert("Failed to save settings. Please try again.")
-    } finally {
-      setIsLoading(false)
+      const result = await uploadProfilePicture({
+        file,
+        user_id: profile.user_id
+      }).unwrap()
+
+      alert(result.message)
+      refetchProfile() // Refresh profile data
+
+      // Clear input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
+    } catch (error: any) {
+      console.error("Upload failed:", error)
+      alert(error?.data?.message || "Failed to upload profile picture")
     }
   }
 
+  const handleRemoveProfilePicture = async () => {
+    if (!profile) return
+
+    try {
+      const result = await removeProfilePicture({
+        user_id: profile.user_id
+      }).unwrap()
+
+      alert(result.message)
+      refetchProfile() // Refresh profile data
+    } catch (error: any) {
+      console.error("Remove failed:", error)
+      alert(error?.data?.message || "Failed to remove profile picture")
+    }
+  }
+
+  const handleUpdateProfile = async () => {
+    if (!profile) return
+
+    // Validate form
+    if (!formData.username.trim()) {
+      alert("Username is required")
+      return
+    }
+
+    try {
+      const result = await updateProfile({
+        user_id: profile.user_id,
+        username: formData.username.trim(),
+        ...(profile.profile_picture && { profile_picture: profile.profile_picture })
+      }).unwrap()
+
+      // Update localStorage with new username
+      if (userData) {
+        const updatedUserData = { ...userData, username: formData.username.trim() }
+        localStorage.setItem('user', JSON.stringify(updatedUserData))
+        setUserData(updatedUserData)
+      }
+
+      alert(result.message)
+      refetchProfile() // Refresh profile data
+    } catch (error: any) {
+      console.error("Update failed:", error)
+      alert(error?.data?.message || "Failed to update profile")
+    }
+  }
+
+  const handleDeleteProfile = async () => {
+    if (!profile) return
+
+    try {
+      const result = await deleteProfile({
+        user_id: profile.user_id,
+        role: profile.role
+      }).unwrap()
+
+      // Clear localStorage
+      localStorage.removeItem('user')
+
+      alert(result.message)
+      // Redirect to login page
+      window.location.href = "/login"
+    } catch (error: any) {
+      console.error("Delete failed:", error)
+      alert(error?.data?.message || "Failed to delete profile")
+      setShowDeleteConfirm(false)
+    }
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('user')
+    window.location.href = "/login"
+  }
+
+  // Authentication error state
+  if (authError) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <Alert className="border-red-200 bg-red-50">
+          <AlertTriangle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="text-red-800">
+            {authError}
+          </AlertDescription>
+        </Alert>
+        <Button
+          onClick={handleLogout}
+          className="mt-4 bg-emerald-600 hover:bg-emerald-700"
+        >
+          Go to Login
+        </Button>
+      </div>
+    )
+  }
+
+  // Wait for user data to load
+  if (!userData) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="flex items-center space-x-2">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <span>Loading user data...</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Loading profile state
+  if (isLoadingProfile) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="flex items-center space-x-2">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <span>Loading profile...</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Profile API error state
+  if (profileError) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <Alert className="border-red-200 bg-red-50">
+          <AlertTriangle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="text-red-800">
+            Failed to load profile. Please try again.
+          </AlertDescription>
+        </Alert>
+        <Button
+          onClick={() => refetchProfile()}
+          variant="outline"
+          className="mt-4"
+        >
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Retry
+        </Button>
+      </div>
+    )
+  }
+
+  // Profile not found or wrong role
+  if (!profile || !isUrbanCouncilorProfile(profile)) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <Alert className="border-yellow-200 bg-yellow-50">
+          <AlertTriangle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription className="text-yellow-800">
+            Urban councilor profile not found or access denied.
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+
+  const isLoading = isUpdating || isUploading || isRemoving || isDeleting
+
   return (
-    <div className="space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">System Settings</h1>
-          <p className="text-slate-600">Configure platform settings and preferences</p>
+          <h1 className="text-2xl font-bold text-slate-900">Profile Settings</h1>
+          <p className="text-slate-600">Manage your urban councilor profile</p>
+          <p className="text-sm text-slate-500 mt-1">
+            Logged in as: {userData.username} (ID: {userData.user_id})
+          </p>
         </div>
-        <Button onClick={handleSave} disabled={isLoading} className="bg-emerald-600 hover:bg-emerald-700">
-          {isLoading ? (
-            <>
-              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4 mr-2" />
-              Save All Settings
-            </>
-          )}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={handleUpdateProfile}
+            disabled={isLoading}
+            className="bg-emerald-600 hover:bg-emerald-700"
+          >
+            {isUpdating ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                Save Changes
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
-      {/* Settings Tabs */}
-      <Tabs defaultValue="general" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 bg-slate-100">
-          <TabsTrigger value="general" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
-            <Settings className="h-4 w-4 mr-2" />
-            General
-          </TabsTrigger>
-          <TabsTrigger
-            value="notifications"
-            className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white"
-          >
-            <Bell className="h-4 w-4 mr-2" />
-            Notifications
-          </TabsTrigger>
-          <TabsTrigger value="security" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
-            <Shield className="h-4 w-4 mr-2" />
-            Security
-          </TabsTrigger>
-          <TabsTrigger value="system" className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
-            <Database className="h-4 w-4 mr-2" />
-            System
-          </TabsTrigger>
-        </TabsList>
-
-        {/* General Settings */}
-        <TabsContent value="general">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Globe className="h-5 w-5" />
-                  Platform Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="platformName">Platform Name</Label>
-                  <Input
-                    id="platformName"
-                    value={settings.platformName}
-                    onChange={(e) => handleSettingChange("platformName", e.target.value)}
-                  />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Profile Picture Section */}
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Camera className="h-5 w-5" />
+              Profile Picture
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col items-center space-y-4">
+              {/* Profile Picture Display */}
+              <div className="relative">
+                <div className="w-32 h-32 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden border-4 border-white shadow-lg">
+                  {profile.profile_picture ? (
+                    <img
+                      src={profile.profile_picture}
+                      alt="Profile"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User className="h-16 w-16 text-slate-400" />
+                  )}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="platformDescription">Platform Description</Label>
-                  <Textarea
-                    id="platformDescription"
-                    value={settings.platformDescription}
-                    onChange={(e) => handleSettingChange("platformDescription", e.target.value)}
-                    className="min-h-[80px]"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="contactEmail">Contact Email</Label>
-                  <Input
-                    id="contactEmail"
-                    type="email"
-                    value={settings.contactEmail}
-                    onChange={(e) => handleSettingChange("contactEmail", e.target.value)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5" />
-                  Upload Settings
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="maxFileSize">Maximum File Size (MB)</Label>
-                  <Input
-                    id="maxFileSize"
-                    type="number"
-                    value={settings.maxFileSize}
-                    onChange={(e) => handleSettingChange("maxFileSize", e.target.value)}
-                  />
-                  <p className="text-sm text-slate-600">Maximum file size for image uploads</p>
-                </div>
-
-                <Alert>
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>Changes to file size limits will only apply to new uploads.</AlertDescription>
-                </Alert>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Notification Settings */}
-        <TabsContent value="notifications">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Mail className="h-5 w-5" />
-                  Email Notifications
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="emailNotifications">Email Notifications</Label>
-                    <p className="text-sm text-slate-600">Send email notifications to users</p>
-                  </div>
-                  <Switch
-                    id="emailNotifications"
-                    checked={settings.emailNotifications}
-                    onCheckedChange={(checked) => handleSettingChange("emailNotifications", checked)}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="adminAlerts">Admin Alerts</Label>
-                    <p className="text-sm text-slate-600">Receive alerts for critical issues</p>
-                  </div>
-                  <Switch
-                    id="adminAlerts"
-                    checked={settings.adminAlerts}
-                    onCheckedChange={(checked) => handleSettingChange("adminAlerts", checked)}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="weeklyReports">Weekly Reports</Label>
-                    <p className="text-sm text-slate-600">Send weekly summary reports</p>
-                  </div>
-                  <Switch
-                    id="weeklyReports"
-                    checked={settings.weeklyReports}
-                    onCheckedChange={(checked) => handleSettingChange("weeklyReports", checked)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Bell className="h-5 w-5" />
-                  Push Notifications
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="pushNotifications">Push Notifications</Label>
-                    <p className="text-sm text-slate-600">Enable browser push notifications</p>
-                  </div>
-                  <Switch
-                    id="pushNotifications"
-                    checked={settings.pushNotifications}
-                    onCheckedChange={(checked) => handleSettingChange("pushNotifications", checked)}
-                  />
-                </div>
-
-                <Alert>
-                  <Bell className="h-4 w-4" />
-                  <AlertDescription>Users must grant permission for push notifications to work.</AlertDescription>
-                </Alert>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* Security Settings */}
-        <TabsContent value="security">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
-                  Authentication
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="requireEmailVerification">Email Verification</Label>
-                    <p className="text-sm text-slate-600">Require email verification for new accounts</p>
-                  </div>
-                  <Switch
-                    id="requireEmailVerification"
-                    checked={settings.requireEmailVerification}
-                    onCheckedChange={(checked) => handleSettingChange("requireEmailVerification", checked)}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="enableTwoFactor">Two-Factor Authentication</Label>
-                    <p className="text-sm text-slate-600">Enable 2FA for admin accounts</p>
-                  </div>
-                  <Switch
-                    id="enableTwoFactor"
-                    checked={settings.enableTwoFactor}
-                    onCheckedChange={(checked) => handleSettingChange("enableTwoFactor", checked)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sessionTimeout">Session Timeout (hours)</Label>
-                  <Input
-                    id="sessionTimeout"
-                    type="number"
-                    value={settings.sessionTimeout}
-                    onChange={(e) => handleSettingChange("sessionTimeout", e.target.value)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5" />
-                  Access Control
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="maxLoginAttempts">Max Login Attempts</Label>
-                  <Input
-                    id="maxLoginAttempts"
-                    type="number"
-                    value={settings.maxLoginAttempts}
-                    onChange={(e) => handleSettingChange("maxLoginAttempts", e.target.value)}
-                  />
-                  <p className="text-sm text-slate-600">Account will be locked after this many failed attempts</p>
-                </div>
-
-                <Alert>
-                  <Shield className="h-4 w-4" />
-                  <AlertDescription>
-                    Security settings changes will take effect immediately for new sessions.
-                  </AlertDescription>
-                </Alert>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        {/* System Settings */}
-        <TabsContent value="system">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Database className="h-5 w-5" />
-                  System Status
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="maintenanceMode">Maintenance Mode</Label>
-                    <p className="text-sm text-slate-600">Put the platform in maintenance mode</p>
-                  </div>
-                  <Switch
-                    id="maintenanceMode"
-                    checked={settings.maintenanceMode}
-                    onCheckedChange={(checked) => handleSettingChange("maintenanceMode", checked)}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="debugMode">Debug Mode</Label>
-                    <p className="text-sm text-slate-600">Enable debug logging (development only)</p>
-                  </div>
-                  <Switch
-                    id="debugMode"
-                    checked={settings.debugMode}
-                    onCheckedChange={(checked) => handleSettingChange("debugMode", checked)}
-                  />
-                </div>
-
-                {settings.maintenanceMode && (
-                  <Alert>
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertDescription>Maintenance mode is enabled. Users cannot access the platform.</AlertDescription>
-                  </Alert>
+                {profile.profile_picture && (
+                  <button
+                    onClick={handleRemoveProfilePicture}
+                    disabled={isLoading}
+                    className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 shadow-lg disabled:opacity-50"
+                    title="Remove profile picture"
+                  >
+                    {isRemoving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <X className="h-4 w-4" />
+                    )}
+                  </button>
                 )}
-              </CardContent>
-            </Card>
+              </div>
 
-            <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <RefreshCw className="h-5 w-5" />
-                  Backup Settings
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label htmlFor="autoBackup">Automatic Backup</Label>
-                    <p className="text-sm text-slate-600">Enable automatic database backups</p>
-                  </div>
-                  <Switch
-                    id="autoBackup"
-                    checked={settings.autoBackup}
-                    onCheckedChange={(checked) => handleSettingChange("autoBackup", checked)}
-                  />
-                </div>
-
-                {settings.autoBackup && (
-                  <div className="space-y-2">
-                    <Label htmlFor="backupFrequency">Backup Frequency</Label>
-                    <select
-                      id="backupFrequency"
-                      value={settings.backupFrequency}
-                      onChange={(e) => handleSettingChange("backupFrequency", e.target.value)}
-                      className="w-full p-2 border border-slate-300 rounded-md"
-                    >
-                      <option value="hourly">Hourly</option>
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                    </select>
-                  </div>
-                )}
-
-                <Button variant="outline" className="w-full bg-transparent">
-                  <Database className="h-4 w-4 mr-2" />
-                  Create Manual Backup
+              {/* Upload Button */}
+              <div className="w-full space-y-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleProfilePictureUpload}
+                  disabled={isLoading}
+                  className="hidden"
+                />
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isLoading}
+                  variant="outline"
+                  className="w-full"
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload Photo
+                    </>
+                  )}
                 </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-      </Tabs>
+                <p className="text-xs text-slate-500 text-center">
+                  Max 5MB • JPG, PNG, GIF
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Profile Information */}
+        <div className="lg:col-span-2 space-y-6">
+          <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Profile Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="username">Username</Label>
+                  <Input
+                    id="username"
+                    value={formData.username}
+                    onChange={(e) => handleInputChange("username", e.target.value)}
+                    disabled={isLoading}
+                    placeholder="Enter username"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="role">Role</Label>
+                  <Input
+                    id="role"
+                    value="Urban Councilor"
+                    disabled
+                    className="bg-slate-50"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="status">Status</Label>
+                  <Input
+                    id="status"
+                    value={profile.status}
+                    disabled
+                    className="bg-slate-50 capitalize"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="created_at">Member Since</Label>
+                  <Input
+                    id="created_at"
+                    value={new Date(profile.created_at).toLocaleDateString()}
+                    disabled
+                    className="bg-slate-50"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="user_id">User ID</Label>
+                <Input
+                  id="user_id"
+                  value={profile.user_id}
+                  disabled
+                  className="bg-slate-50"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Danger Zone */}
+          <Card className="bg-white/80 backdrop-blur-sm border-red-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-red-600">
+                <AlertTriangle className="h-5 w-5" />
+                Danger Zone
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert className="border-red-200 bg-red-50">
+                <AlertTriangle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-800">
+                  Deleting your profile is permanent and cannot be undone. All your data will be lost.
+                </AlertDescription>
+              </Alert>
+
+              {!showDeleteConfirm ? (
+                <Button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={isLoading}
+                  variant="outline"
+                  className="border-red-300 text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Profile
+                </Button>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-red-800">
+                    Are you sure you want to delete your profile?
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleDeleteProfile}
+                      disabled={isDeleting}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      {isDeleting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Deleting...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Yes, Delete
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={() => setShowDeleteConfirm(false)}
+                      disabled={isDeleting}
+                      variant="outline"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   )
 }

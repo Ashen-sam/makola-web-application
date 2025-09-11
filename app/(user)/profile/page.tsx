@@ -1,5 +1,4 @@
 "use client"
-
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   AlertDialog,
@@ -16,6 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, } from "@/components/ui/card"
+// Add this import with your existing imports
 import {
   Dialog,
   DialogContent,
@@ -36,6 +36,18 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  isOfficerProfile,
+  isResidentProfile,
+  UpdateOfficerProfileRequest,
+  UpdateResidentProfileRequest,
+  useDeleteProfileMutation,
+  useGetProfileQuery,
+  useUpdateProfileMutation,
+  useUploadProfilePictureMutation
+} from "@/services/profile"; // or wherever your profile types are located
+import toast from "react-hot-toast"
+
+import {
   AlertTriangle,
   ArrowUp,
   Award,
@@ -44,7 +56,6 @@ import {
   CheckCircle,
   Clock,
   Edit3,
-  Heart,
   Loader2,
   MapPin,
   MessageCircle,
@@ -87,7 +98,6 @@ interface UserStats {
   issuesReported: number
   issuesResolved: number
   commentsPosted: number
-  likesReceived: number
   upvotesReceived: number
   communityRank: string
 }
@@ -112,7 +122,7 @@ interface UIIssue {
   photos?: string[]
 }
 
-// User interface from localStorage (matching your stored structure)
+// User interface from localStorage (matching your stored structure)  
 interface StoredUser {
   user_id?: number
   resident_id?: number
@@ -126,22 +136,39 @@ interface StoredUser {
   bio?: string
   created_at: string
   avatar?: string
-  role: "resident" | "urban_councilor"
+  role: "resident" | "urban_councilor" | "department_officer"
 }
 
 export default function Profile() {
-  const [isEditing, setIsEditing] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [errors, setErrors] = useState<Record<string, string>>({})
+
   const [activeTab, setActiveTab] = useState("stats")
   const [editingIssue, setEditingIssue] = useState<UIIssue | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([])
+  const [isEditing, setIsEditing] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [user, setUser] = useState<StoredUser | null>(null)
   const [currentUserId, setCurrentUserId] = useState<number | null>(null)
   const [isInitialLoading, setIsInitialLoading] = useState(true)
-  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([])
 
   const router = useRouter()
+  // Replace the existing useGetProfileQuery call with:
+  const {
+    data: profileData,
+    isLoading: isLoadingProfile,
+    refetch: refetchProfile
+  } = useGetProfileQuery(
+    { user_id: currentUserId! },
+    {
+      skip: !currentUserId
+    }
+  )
+
+  const [updateProfile, { isLoading: isUpdatingProfile }] = useUpdateProfileMutation()
+  const [deleteProfile, { isLoading: isDeletingProfile }] = useDeleteProfileMutation()
+  const [uploadProfilePicture, { isLoading: isUploadingPicture }] = useUploadProfilePictureMutation()
+  // const [removeProfilePicture, { isLoading: isRemovingPicture }] = useRemoveProfilePictureMutation()
   // Initialize user data from localStorage
   useEffect(() => {
     try {
@@ -165,13 +192,13 @@ export default function Profile() {
         }
       } else {
         console.error('No user data found in localStorage')
-        window.location.href = '/auth/login'
+        window.location.href = '/login'
         return
       }
     } catch (error) {
       console.error('Error loading user data from localStorage:', error)
       setErrors({ general: 'Error loading user data. Please log in again.' })
-      window.location.href = '/auth/login'
+      window.location.href = '/login'
     } finally {
       setIsInitialLoading(false)
     }
@@ -194,10 +221,11 @@ export default function Profile() {
     }
   )
 
+
+
   const [updateIssue, { isLoading: isUpdatingIssue }] = useUpdateIssueMutation()
   const [deleteIssue, { isLoading: isDeletingIssue }] = useDeleteIssueMutation()
 
-  // Profile state
   const [profile, setProfile] = useState<UserProfile>({
     username: "",
     fullName: "",
@@ -212,26 +240,28 @@ export default function Profile() {
 
   const [editProfile, setEditProfile] = useState<UserProfile>(profile)
 
-  // Update profile when user data changes
+
   useEffect(() => {
-    if (user) {
+    if (profileData?.profile) {
+      const apiProfile = profileData.profile
       const updatedProfile: UserProfile = {
-        username: user.username || "",
-        fullName: user.name || user.full_name || "",
-        email: user.email || "",
-        phoneNumber: user.phone_number || "",
-        nic: user.nic || "",
-        location: user.address || "",
-        bio: user.bio || "Active community member passionate about improving our neighborhood.",
-        joinDate: user.created_at
-          ? new Date(user.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })
-          : "Recently",
-        avatar: user.avatar || "/placeholder.svg?height=120&width=120",
+        username: apiProfile.username || "",
+        fullName: isResidentProfile(apiProfile) ? apiProfile.resident_details.name :
+          isOfficerProfile(apiProfile) ? apiProfile.officer_details.department_name : apiProfile.username,
+        email: user?.email || "", // Keep from localStorage as API might not have email
+        phoneNumber: isResidentProfile(apiProfile) ? apiProfile.resident_details.phone_number :
+          isOfficerProfile(apiProfile) ? apiProfile.officer_details.phone_number : "",
+        nic: isResidentProfile(apiProfile) ? apiProfile.resident_details.nic : "",
+        location: isResidentProfile(apiProfile) ? apiProfile.resident_details.address :
+          isOfficerProfile(apiProfile) ? apiProfile.officer_details.address : "",
+        bio: user?.bio || "Active community member passionate about improving our neighborhood.",
+        joinDate: new Date(apiProfile.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }),
+        avatar: apiProfile.profile_picture || "/placeholder.svg?height=120&width=120",
       }
       setProfile(updatedProfile)
       setEditProfile(updatedProfile)
     }
-  }, [user])
+  }, [profileData, user])
 
   // Transform API Issue data to UI format
   const transformApiIssueToUI = (issue: Issue): UIIssue => {
@@ -284,8 +314,7 @@ export default function Profile() {
     return {
       issuesReported: allIssues.length,
       issuesResolved: allIssues.filter(issue => issue.status === "resolved").length,
-      commentsPosted: 45, // This would need a separate API call
-      likesReceived: 89, // This would need a separate API call
+      commentsPosted: allIssues.reduce((total, issue) => total + issue.comments, 0),
       upvotesReceived: allIssues.reduce((total, issue) => total + issue.upvotes, 0),
       communityRank: "Community Champion",
     }
@@ -297,57 +326,67 @@ export default function Profile() {
     return transformedIssues.filter(issue => issue.status === activeTab)
   }, [transformedIssues, activeTab])
 
-  const validateProfile = (): boolean => {
-    const newErrors: Record<string, string> = {}
-
-    if (!editProfile.fullName.trim()) {
-      newErrors.fullName = "Full name is required"
-    }
-
-    if (!editProfile.email.trim()) {
-      newErrors.email = "Email is required"
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editProfile.email)) {
-      newErrors.email = "Please enter a valid email"
-    }
-
-    if (!editProfile.phoneNumber.trim()) {
-      newErrors.phoneNumber = "Phone number is required"
-    }
-
-    if (!editProfile.location.trim()) {
-      newErrors.location = "Location is required"
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
 
   const handleSave = async () => {
-    if (!validateProfile()) return
+    console.log("Saving profile with data:", editProfile)
+    if (!user || !currentUserId) return
+
 
     setIsLoading(true)
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-
-      if (user) {
-        const updatedUser: StoredUser = {
-          ...user,
+      // Prepare update request based on user role
+      if (user.role === 'resident') {
+        const updateData: UpdateResidentProfileRequest = {
+          user_id: currentUserId,
+          username: editProfile.username,
+          profile_picture: editProfile.avatar !== "/placeholder.svg?height=120&width=120" ? editProfile.avatar : undefined,
           name: editProfile.fullName,
-          email: editProfile.email,
-          phone_number: editProfile.phoneNumber,
           address: editProfile.location,
-          bio: editProfile.bio,
+          phone_number: editProfile.phoneNumber,
+          nic: editProfile.nic,
         }
-        localStorage.setItem('user', JSON.stringify(updatedUser))
-        setUser(updatedUser)
+
+        await updateProfile(updateData).unwrap()
+      } else if (user.role === 'department_officer') {
+        const updateData: UpdateOfficerProfileRequest = {
+          user_id: currentUserId,
+          username: editProfile.username,
+          profile_picture: editProfile.avatar !== "/placeholder.svg?height=120&width=120" ? editProfile.avatar : undefined,
+          department_name: editProfile.fullName,
+          officer_address: editProfile.location,
+          officer_phone: editProfile.phoneNumber,
+        }
+
+        await updateProfile(updateData).unwrap()
       }
+
+      // Update localStorage
+      const updatedUser: StoredUser = {
+        ...user,
+        username: editProfile.username,
+        name: editProfile.fullName,
+        phone_number: editProfile.phoneNumber,
+        address: editProfile.location,
+        bio: editProfile.bio,
+      }
+      localStorage.setItem('user', JSON.stringify(updatedUser))
+      setUser(updatedUser)
+
+      // Refresh profile data
+      await refetchProfile()
 
       setProfile(editProfile)
       setIsEditing(false)
       setErrors({})
-    } catch (error) {
-      console.log(error)
-      setErrors({ general: "Failed to update profile. Please try again." })
+
+      toast.success("Profile updated successfully!")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      console.error("Failed to update profile:", error)
+      setErrors({
+        general: error?.data?.message || "Failed to update profile. Please try again."
+      })
+      toast.error("Failed to update profile. Please try again.")
     } finally {
       setIsLoading(false)
     }
@@ -370,10 +409,52 @@ export default function Profile() {
     }
   }
 
+  const handleProfilePictureUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !currentUserId) return
+
+    try {
+      const result = await uploadProfilePicture({
+        file,
+        user_id: currentUserId
+      }).unwrap()
+
+      // Update the profile with new picture URL
+      setEditProfile(prev => ({ ...prev, avatar: result.profile_picture }))
+      setProfile(prev => ({ ...prev, avatar: result.profile_picture }))
+
+      toast.success("Profile picture updated successfully!")
+    } catch (error: unknown) {
+      console.error("Failed to upload profile picture:", error)
+      toast.error("Failed to upload profile picture. Please try again.")
+    }
+  }
+
+
   const handleEditIssue = (issue: UIIssue) => {
     setEditingIssue({ ...issue })
     setSelectedPhotos(issue.photos || []) // Initialize with existing photos
     setIsEditDialogOpen(true)
+  }
+  const handleDeleteProfile = async () => {
+    if (!user || !currentUserId) return
+
+    try {
+      await deleteProfile({
+        user_id: currentUserId,
+        role: user.role === 'urban_councilor' ? 'resident' : user.role // Adjust based on your API
+      }).unwrap()
+
+      // Clear localStorage and redirect
+      localStorage.removeItem('user')
+      localStorage.removeItem('isAuthenticated')
+
+      toast.success("Profile deleted successfully!")
+      window.location.href = '/auth/login'
+    } catch (error: unknown) {
+      console.error("Failed to delete profile:", error)
+      toast.error("Failed to delete profile. Please try again.")
+    }
   }
 
   const handlePhotoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -421,6 +502,7 @@ export default function Profile() {
         role: user.role,
         photos: selectedPhotos,
       }
+      const loadingToast = toast.loading("Submitting your issue report...")
 
       await updateIssue({
         id: editingIssue.issue_id,
@@ -429,6 +511,10 @@ export default function Profile() {
 
       await refetchIssues()
       setIsEditDialogOpen(false)
+      toast.success("Issue updated successfully! Thank you for helping improve our community.", {
+        id: loadingToast,
+        duration: 4000,
+      })
       setEditingIssue(null)
       setSelectedPhotos([]) // Reset photos
       setErrors({})
@@ -445,6 +531,7 @@ export default function Profile() {
     }
   }
 
+  // const loadingToast = toast.loading("Submitting your issue report...")
 
   const handleDeleteIssue = async (issueId: string) => {
     if (!user || !currentUserId) return
@@ -461,6 +548,7 @@ export default function Profile() {
       }).unwrap()
 
       await refetchIssues()
+      toast.success("Issue deleted successfully! Thank you for helping improve our community.")
       setErrors({})
     } catch (error: unknown) {
       console.error("Failed to delete issue:", error)
@@ -517,7 +605,7 @@ export default function Profile() {
   }
 
   // Loading states
-  if (isInitialLoading) {
+  if (isInitialLoading || isLoadingProfile) {
     return (
       <div className="max-w-4xl mx-auto space-y-6 p-4">
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
@@ -620,12 +708,25 @@ export default function Profile() {
                   </AvatarFallback>
                 </Avatar>
                 {isEditing && (
-                  <Button
-                    size="sm"
-                    className="absolute bottom-0 right-0 rounded-full h-8 w-8 p-0 bg-emerald-600 hover:bg-emerald-700"
-                  >
-                    <Camera className="h-4 w-4" />
-                  </Button>
+                  <>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleProfilePictureUpload}
+                      className="hidden"
+                      id="profile-picture-upload"
+                    />
+                    <label
+                      htmlFor="profile-picture-upload"
+                      className="absolute bottom-0 right-0 rounded-full h-8 w-8 p-0 bg-emerald-600 hover:bg-emerald-700 flex items-center justify-center cursor-pointer"
+                    >
+                      {isUploadingPicture ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-white" />
+                      ) : (
+                        <Camera className="h-4 w-4 text-white" />
+                      )}
+                    </label>
+                  </>
                 )}
               </div>
               <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">{userStats.communityRank}</Badge>
@@ -649,7 +750,7 @@ export default function Profile() {
                         className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700"
                       >
                         {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                        {isLoading ? "Saving..." : "Save"}
+                        {isUpdatingProfile ? "Saving..." : "Save"}
                       </Button>
                       <Button
                         onClick={handleCancel}
@@ -661,6 +762,63 @@ export default function Profile() {
                       </Button>
                     </div>
                   )}
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="flex items-center gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete Profile
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="max-w-md">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+                          <AlertTriangle className="h-5 w-5" />
+                          Delete Profile Permanently?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-3">
+                          <div className="text-slate-600">
+                            This action cannot be undone. This will permanently delete your account and remove all your data including:
+                          </div>
+                          <ul className="text-sm text-slate-600 space-y-1 pl-4">
+                            <li>• Your profile information</li>
+                            <li>• All reported issues ({userStats.issuesReported})</li>
+                            <li>• Comments and interactions</li>
+                            <li>• Profile pictures</li>
+                          </ul>
+                          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-3">
+                            <div className="text-sm text-red-700 font-medium">
+                              Are you absolutely sure you want to delete your account?
+                            </div>
+                          </div>
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter className="flex flex-col sm:flex-row gap-2">
+                        <AlertDialogCancel className="w-full sm:w-auto">
+                          Keep My Account
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleDeleteProfile}
+                          className="bg-red-600 hover:bg-red-700 w-full sm:w-auto"
+                          disabled={isDeletingProfile}
+                        >
+                          {isDeletingProfile ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              Deleting Account...
+                            </>
+                          ) : (
+                            <>
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Permanently
+                            </>
+                          )}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </div>
 
@@ -765,7 +923,7 @@ export default function Profile() {
         </TabsList>
 
         <TabsContent value="stats">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
               <CardContent className="p-4 text-center">
                 <TrendingUp className="h-8 w-8 text-blue-600 mx-auto mb-2" />
@@ -790,13 +948,6 @@ export default function Profile() {
               </CardContent>
             </Card>
 
-            <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
-              <CardContent className="p-4 text-center">
-                <Heart className="h-8 w-8 text-red-600 mx-auto mb-2" />
-                <p className="text-2xl font-bold text-slate-900">{userStats.likesReceived}</p>
-                <p className="text-sm text-slate-600">Likes Received</p>
-              </CardContent>
-            </Card>
 
             <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
               <CardContent className="p-4 text-center">
@@ -1134,43 +1285,6 @@ export default function Profile() {
                   className="w-full"
                 />
               </div>
-
-              {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="dateObserved">Date Observed</Label>
-                  <Input
-                    id="dateObserved"
-                    type="date"
-                    value={editingIssue.dateObserved || ''}
-                    onChange={(e) =>
-                      setEditingIssue({
-                        ...editingIssue,
-                        dateObserved: e.target.value
-                      })
-                    }
-                    max={new Date().toISOString().split('T')[0]}
-                    className="w-full"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="timeObserved">Time Observed</Label>
-                  <Input
-                    id="timeObserved"
-                    type="time"
-                    value={editingIssue.timeObserved || ''}
-                    onChange={(e) =>
-                      setEditingIssue({
-                        ...editingIssue,
-                        timeObserved: e.target.value
-                      })
-                    }
-                    className="w-full"
-                  />
-                </div>
-              </div> */}
-
-              {/* Current Status Display */}
               <Badge className={`${getStatusColor(editingIssue.status)} flex items-center gap-1 absolute top-3 right-15`}>
                 {getStatusIcon(editingIssue.status)}
                 {editingIssue.status.replace("-", " ").toUpperCase()}
@@ -1212,6 +1326,8 @@ export default function Profile() {
           </DialogFooter>
         </DialogContent >
       </Dialog >
+
+
     </div >
   )
 }

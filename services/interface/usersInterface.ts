@@ -15,7 +15,7 @@ export interface SignUpRequest {
 export interface BaseUser {
   user_id: number;
   email: string;
-  role: "resident" | "urban_councilor";
+  role: "resident" | "urban_councilor" | "department_officer";
 }
 
 export interface ResidentUser extends BaseUser {
@@ -27,13 +27,20 @@ export interface ResidentUser extends BaseUser {
   nic: string;
 }
 
+export interface DepartmentOfficerUser extends BaseUser {
+  role: "department_officer";
+  department_officer_id: number;
+  name: string;
+  department: string;
+}
+
 export interface UrbanCouncilorUser extends BaseUser {
   role: "urban_councilor";
 }
 
 export interface AuthResponseSignIn {
   message: string;
-  user: ResidentUser | UrbanCouncilorUser;
+  user: ResidentUser | UrbanCouncilorUser | DepartmentOfficerUser;
 }
 
 export interface SignUpSuccessResponse {

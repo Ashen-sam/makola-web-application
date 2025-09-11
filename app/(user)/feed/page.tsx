@@ -5,11 +5,13 @@ import IssuePost from "@/components/issue-post"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useIssueRealtime } from "@/hooks/useIssueRealtime"
 import { useGetIssuesQuery } from "@/services/issues"
 import { AlertTriangle, ArrowUp, CheckCircle, Clock, Filter, Loader2 } from "lucide-react"
 import { useMemo, useState } from "react"
 
 export default function FeedPage() {
+  useIssueRealtime();
   const [filter, setFilter] = useState("all")
   const [sortBy, setSortBy] = useState("recent")
   const [page, setPage] = useState(1)
@@ -30,9 +32,18 @@ export default function FeedPage() {
     data: issuesData,
     isLoading,
     error,
-    refetch
-  } = useGetIssuesQuery(queryParams)
+    refetch,
+  } = useGetIssuesQuery(queryParams, {
+    // 👇 This forces rerun even if args/data look same
+    selectFromResult: (result) => ({
+      ...result,
+      data: result.data ? { ...result.data } : undefined
+    }),
+  })
 
+
+
+  // Auto-refresh every 15 seconds when page is visible
 
 
   // Transform API data to match component structure
@@ -75,7 +86,6 @@ export default function FeedPage() {
   }, [issuesData])
 
 
-  console.log(issuesData, "Issues Data in Feed component") // Debug log for issues data
   // Calculate stats from the issues data
   const stats = useMemo(() => {
     const allIssues = issuesData?.issues || []

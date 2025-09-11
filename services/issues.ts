@@ -78,7 +78,7 @@ export interface UpdateIssueRequest {
   date_observed?: string;
   time_observed?: string;
   user_id: number;
-  role: "resident" | "urban_councilor";
+  role?: "resident" | "urban_councilor" | "department_officer";
   latitude?: number;
   longitude?: number;
   photos?: string[];
@@ -110,7 +110,7 @@ interface MakolaBoundariesResponse {
 
 interface DeleteIssueRequest {
   user_id: number;
-  role: "resident" | "urban_councilor";
+  role: "resident" | "urban_councilor" | "department_officer";
 }
 
 interface GetIssuesResponse {
@@ -168,14 +168,14 @@ interface GetIssuesParams {
 interface CreateCommentRequest {
   content: string;
   user_id: number;
-  role: "resident" | "urban_councilor";
+  role: "resident" | "urban_councilor" | "department_officer";
   parent_comment_id?: number | null; // For replies
 }
 
 interface CreateReplyRequest {
   content: string;
   user_id: number;
-  role: "resident" | "urban_councilor";
+  role: "resident" | "urban_councilor" | "department_officer";
   parent_comment_id: number; // Required for replies
 }
 
@@ -196,7 +196,7 @@ export interface GetCommentsResponse {
 export interface UpdateCommentRequest {
   content: string;
   user_id: number;
-  role: "resident" | "urban_councilor";
+  role: "resident" | "urban_councilor" | "department_officer";
 }
 
 export interface UpdateCommentResponse {
@@ -206,7 +206,7 @@ export interface UpdateCommentResponse {
 
 export interface DeleteCommentRequest {
   user_id: number;
-  role: "resident" | "urban_councilor";
+  role: "resident" | "urban_councilor" | "department_officer";
 }
 
 export interface DeleteCommentResponse {
@@ -498,6 +498,7 @@ export const issuesApi = baseApi.injectEndpoints({
         { type: "Issues", id },
         { type: "Issues", id: "LIST" },
         { type: "Stats", id: "LIST" },
+        "Issues",
       ],
     }),
 

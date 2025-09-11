@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CardContent, CardHeader } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
+import { Copy, Link } from "lucide-react"
 import {
   useAddCommentToIssueMutation,
   useAddReplyToCommentMutation,
@@ -19,6 +20,7 @@ import { AlertTriangle, ArrowUp, CheckCircle, ChevronLeft, ChevronRight, Clock, 
 import Image from "next/image"
 import { useEffect, useMemo, useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog"
+import toast from "react-hot-toast"
 // Updated Comment interface to match API response
 interface ApiComment {
   comment_id: number;
@@ -95,6 +97,7 @@ export default function IssuePost({
   const [newComment, setNewComment] = useState("")
   const [hasLoadedComments, setHasLoadedComments] = useState(false)
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
+  const [showShareDialog, setShowShareDialog] = useState(false)
   // Reply states
   const [replyingTo, setReplyingTo] = useState<number | null>(null)
   const [replyContent, setReplyContent] = useState("")
@@ -215,6 +218,44 @@ export default function IssuePost({
 
   // Get current comment count
   const currentCommentCount = transformedComments.length > 0 ? transformedComments.length : comment_count;
+
+  const handleShare = async () => {
+    const shareUrl = `${window.location.origin}/issue/${issueId}`
+    const shareText = `Check out this issue: ${title}\n\nLocation: ${location}\nStatus: ${currentStatus}\n\n${shareUrl}`
+
+    // Check if Web Share API is supported (mobile devices)
+    if (navigator.share && /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+      try {
+        await navigator.share({
+          title: `Issue: ${title}`,
+          text: `Location: ${location} | Status: ${currentStatus}`,
+          url: shareUrl,
+        })
+      } catch (error) {
+        console.log('Share was cancelled or failed')
+      }
+    } else {
+      // Fallback for desktop - show share dialog
+      setShowShareDialog(true)
+    }
+  }
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success('Link copied to clipboard!')
+      setShowShareDialog(false)
+    } catch (error) {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea')
+      textArea.value = text
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textArea)
+      toast.success('Link copied to clipboard!')
+      setShowShareDialog(false)
+    }
+  }
 
   // Modified handleCommentToggle function
   const handleCommentToggle = () => {
@@ -677,10 +718,10 @@ export default function IssuePost({
             </div>
           </div>
           <div className="flex gap-2">
-            <Badge className={`text-xs ${getPriorityColor(priority!)}`}>{priority?.toUpperCase()}</Badge>
+            <Badge className={`text-xs ${getPriorityColor(priority!)}`}>{priority}</Badge>
             <Badge className={`text-xs flex items-center gap-1 ${getStatusColor(currentStatus!)}`}>
               {getStatusIcon(currentStatus!)}
-              {currentStatus?.replace("-", " ").toUpperCase()}
+              {currentStatus?.replace("-", " ")}
             </Badge>
           </div>
 
@@ -732,7 +773,12 @@ export default function IssuePost({
               <span>{currentCommentCount}</span>
             </Button>
 
-            <Button variant="ghost" size="sm" className="flex items-center gap-2 text-slate-600 hover:text-slate-700">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleShare}
+              className="flex items-center gap-2 text-slate-600 hover:text-slate-700"
+            >
               <Share2 className="h-4 w-4" />
               <span>Share</span>
             </Button>
@@ -848,6 +894,33 @@ export default function IssuePost({
                 {photos.indexOf(selectedPhoto) + 1} of {photos.length}
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+      )}
+      {showShareDialog && (
+        <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Share Issue</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="p-4 bg-slate-50 rounded-lg">
+                <h4 className="font-semibold text-slate-900 mb-1">{title}</h4>
+                <p className="text-sm text-slate-600">Location: {location}</p>
+                <p className="text-sm text-slate-600">Status: {currentStatus}</p>
+              </div>
+
+              <div className="space-y-3">
+                <Button
+                  onClick={() => copyToClipboard(`${window.location.origin}/issue/${issueId}`)}
+                  className="w-full justify-start gap-3 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy Link
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
       )}
