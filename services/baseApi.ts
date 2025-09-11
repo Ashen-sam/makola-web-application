@@ -17,7 +17,10 @@ export const baseApi = createApi({
     "AdminUserStats",
     "AdminUser",
     "Issue",
+    "DepartmentOfficerStats",
+    "DepartmentOfficerIssues",
     "Stats",
+    "Profile"
   ],
   endpoints: () => ({}),
 });

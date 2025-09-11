@@ -1,10 +1,10 @@
 "use client"
+//admin issue post component
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CardContent, CardHeader } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
@@ -12,11 +12,11 @@ import { useGetUsersQuery, UserRole } from "@/services/admin"
 import {
   Comment,
   Issue,
-  User,
   useAddCommentToIssueMutation,
   useAddReplyToCommentMutation,
   useDeleteCommentMutation,
   useGetCommentsForIssueQuery,
+  User,
   useUpdateCommentMutation
 } from "@/services/issues"
 import {
@@ -41,6 +41,7 @@ interface AdminIssuePostProps extends Issue {
   handleDeleteIssue?: (issueId: number) => void
   handleStatusChange?: (issueId: number, newStatus: string) => void
   handleAssignOfficer?: (issueId: number, officerName: string) => void
+  isUpdatingStatus?: boolean
 }
 
 export default function AdminIssuePost({
@@ -58,6 +59,7 @@ export default function AdminIssuePost({
   handleStatusChange,
   handleDeleteIssue,
   handleAssignOfficer,
+  isUpdatingStatus,
   assignedOfficer,
 }: AdminIssuePostProps) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -613,8 +615,13 @@ export default function AdminIssuePost({
           <div className="flex gap-3 items-center">
             <Avatar className="h-10 w-10 border flex items-center justify-center">
               <AvatarImage src="/placeholder.svg" />
-              <AvatarFallback className="bg-emerald-100 text-emerald-700 text-lg font-semibold">
-                {users?.username?.[0]?.toUpperCase() || 'U'}
+              <AvatarFallback className="bg-emerald-100 text-emerald-700 text-md font-semibold">
+                {users?.username
+                  ? users.username
+                    .split(" ") // split by space
+                    .map((n) => n[0]?.toUpperCase()) // take first letter of each part
+                    .join("") // join them together
+                  : "U"}
               </AvatarFallback>
             </Avatar>
             <div className="flex items-center gap-1">
@@ -627,7 +634,7 @@ export default function AdminIssuePost({
           <div className="flex gap-2 items-center">
             <Badge className={`text-xs ${getPriorityColor(priority!)}`}>{priority}</Badge>
             <Badge className={`text-xs flex items-center gap-1 ${getStatusColor(status!)}`}>
-              {getStatusIcon(status!)}
+              {isUpdatingStatus && <Loader2 className="h-4 w-4 animate-spin" />}
               {status?.replace("_", " ")}
             </Badge>
             {/* Admin Actions Toggle */}
@@ -650,7 +657,7 @@ export default function AdminIssuePost({
           <h3 className="font-semibold text-lg text-slate-900">{title}</h3>
           <p className="text-slate-700 text-md leading-relaxed break-words line-clamp-3">{description}</p>
           <div className="flex gap-2 mt-1 text-md text-slate-600">
-            <div>Location: {location || 'Not specified'}</div>
+            <div className="font-semibold">Location: {location || 'Not specified'}</div>
           </div>
 
           {/* Show assigned officer if available */}

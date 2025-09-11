@@ -66,7 +66,11 @@ export default function LoginPage() {
         // Route based on user role
         if (response.user.role === "urban_councilor") {
           router.push("/dashboard")
-        } else {
+
+        } else if (response.user.role === "department_officer") {
+          router.push("/home")
+        }
+        else {
           router.push("/feed")
         }
       }, 2500)

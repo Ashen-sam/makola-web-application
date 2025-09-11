@@ -157,10 +157,10 @@ export default function Analytics() {
                     <h3 className="font-semibold text-slate-900">{area.area}</h3>
                     <Badge
                       className={`${isGood
-                          ? "bg-green-100 text-green-800 border-green-200"
-                          : isOkay
-                            ? "bg-yellow-100 text-yellow-800 border-yellow-200"
-                            : "bg-red-100 text-red-800 border-red-200"
+                        ? "bg-green-100 text-green-800 border-green-200"
+                        : isOkay
+                          ? "bg-yellow-100 text-yellow-800 border-yellow-200"
+                          : "bg-red-100 text-red-800 border-red-200"
                         }`}
                     >
                       {successRate}% Fixed

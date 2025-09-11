@@ -1,40 +1,133 @@
 "use client"
-
+//admin dashboard
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
-import { Users, AlertTriangle, CheckCircle, Clock, TrendingUp, Eye, UserPlus, Settings, Calendar } from "lucide-react"
+import { Users, AlertTriangle, CheckCircle, Clock, TrendingUp, Eye, UserPlus, Settings, Calendar, Loader2 } from "lucide-react"
+import { useGetUsersStatsQuery, useGetUsersQuery } from "@/services/admin"
+import { useState, useEffect } from "react"
+
+// Interface for user data in localStorage
+interface StoredUser {
+  user_id: number;
+  username: string;
+  role: string;
+  status: string;
+}
 
 export default function AdminDashboard() {
-  // Admin-specific data
-  const adminStats = {
-    totalUsers: 1247,
-    newUsersToday: 12,
-    totalIssues: 339,
-    pendingReview: 23,
-    resolvedToday: 8,
-    activeUsers: 89,
-  }
+  const [adminUser, setAdminUser] = useState<StoredUser | null>(null);
+  const [isClient, setIsClient] = useState(false);
 
-  // Recent activity data
-  const recentActivity = [
-    { time: "2 min ago", action: "New issue reported", user: "Sarah Johnson", type: "issue" },
-    { time: "5 min ago", action: "Issue marked as resolved", user: "Admin", type: "resolved" },
-    { time: "12 min ago", action: "New user registered", user: "Mike Chen", type: "user" },
-    { time: "18 min ago", action: "Issue priority updated", user: "Admin", type: "update" },
-    { time: "25 min ago", action: "Comment added to issue", user: "Emma Davis", type: "comment" },
-  ]
+  // Get admin user data from localStorage
+  useEffect(() => {
+    setIsClient(true);
+    try {
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        const parsedUser: StoredUser = JSON.parse(storedUser);
+        setAdminUser(parsedUser);
+      }
+    } catch (error) {
+      console.error('Error parsing user data from localStorage:', error);
+    }
+  }, []);
 
-  // Issues by status for admin view
-  const issueStatusData = [
-    { status: "Open", count: 45, color: "#f59e0b" },
-    { status: "In Review", count: 23, color: "#3b82f6" },
-    { status: "In Progress", count: 51, color: "#8b5cf6" },
-    { status: "Resolved", count: 220, color: "#10b981" },
-  ]
+  // API calls - only make calls when we have admin user data
+  const {
+    data: userStatsData,
+    isLoading: isStatsLoading,
+    error: statsError,
+    refetch: refetchStats
+  } = useGetUsersStatsQuery(
+    {
+      admin_user_id: adminUser?.user_id || 0,
+      admin_role: adminUser?.role || "",
+    },
+    {
+      skip: !adminUser, // Skip the query if we don't have admin user data
+    }
+  );
 
-  // Priority issues that need admin attention
+  const {
+    data: usersData,
+    isLoading: isUsersLoading,
+    error: usersError,
+  } = useGetUsersQuery(
+    {
+      admin_user_id: adminUser?.user_id || 0,
+      admin_role: adminUser?.role || "",
+      type: "all",
+      status: "all",
+    },
+    {
+      skip: !adminUser, // Skip the query if we don't have admin user data
+    }
+  );
+
+  // Extract statistics from API response
+  const adminStats = userStatsData?.statistics || {
+    totalUsers: 0,
+    activeUsers: 0,
+    suspendedUsers: 0,
+    totalDepartments: 0,
+    residentsThisWeek: 0,
+    residentsToday: 0,
+    recentUsers: [],
+  };
+
+  // Calculate user statistics for chart
+  const getUserRoleData = () => {
+    if (!usersData?.users) return [];
+
+    const roleCounts = usersData.users.reduce((acc, user) => {
+      const role = user.role === 'department_officer' ? 'Department Officer' :
+        user.role === 'urban_councilor' ? 'Urban Councilor' :
+          user.role === 'resident' ? 'Resident' : user.role;
+      acc[role] = (acc[role] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(roleCounts).map(([role, count]) => ({
+      role,
+      count,
+      color: role === 'Resident' ? '#10b981' :
+        role === 'Department Officer' ? '#3b82f6' :
+          role === 'Urban Councilor' ? '#8b5cf6' : '#6b7280'
+    }));
+  };
+
+  // Recent activity from recent users
+  const getRecentActivity = () => {
+    if (!adminStats.recentUsers || adminStats.recentUsers.length === 0) {
+      return [
+        { time: "No recent activity", action: "No recent user registrations", user: "System", type: "system" }
+      ];
+    }
+
+    return adminStats.recentUsers.slice(0, 5).map((user) => {
+
+      const timeAgo = new Date(user.created_at);
+      const now = new Date();
+      const diffInHours = Math.floor((now.getTime() - timeAgo.getTime()) / (1000 * 60 * 60));
+      const timeDisplay = diffInHours < 1 ? "Less than 1 hour ago" :
+        diffInHours === 1 ? "1 hour ago" :
+          diffInHours < 24 ? `${diffInHours} hours ago` :
+            `${Math.floor(diffInHours / 24)} days ago`;
+
+      return {
+        time: timeDisplay,
+        action: `New ${user.role.replace('_', ' ')} registered`,
+        user: user.username,
+        type: "user"
+      };
+    });
+  };
+
+  const recentActivity = getRecentActivity();
+
+  // Mock data for issues (since this is not in the users API)
   const priorityIssues = [
     {
       id: "ISS-001",
@@ -60,7 +153,7 @@ export default function AdminDashboard() {
       timeAgo: "6 hours ago",
       area: "Market Street",
     },
-  ]
+  ];
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -85,9 +178,71 @@ export default function AdminDashboard() {
         return <UserPlus className="h-4 w-4 text-blue-600" />
       case "update":
         return <Settings className="h-4 w-4 text-purple-600" />
+      case "system":
+        return <Clock className="h-4 w-4 text-slate-400" />
       default:
         return <Clock className="h-4 w-4 text-slate-600" />
     }
+  }
+
+  // Auto-refresh stats every 30 seconds
+  useEffect(() => {
+    if (!adminUser) return;
+
+    const interval = setInterval(() => {
+      refetchStats();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [refetchStats, adminUser]);
+
+  // Show nothing during SSR
+  if (!isClient) {
+    return null;
+  }
+
+  // No user in localStorage
+  if (!adminUser) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 mx-auto mb-4 text-red-600" />
+          <p className="text-red-600 mb-4">No admin user found in session</p>
+          <p className="text-slate-600 text-sm">Please log in again</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading state
+  if (isStatsLoading || isUsersLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-emerald-600" />
+          <p className="text-slate-600">Loading dashboard...</p>
+          <p className="text-slate-500 text-sm mt-2">Welcome back, {adminUser.username}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (statsError || usersError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <AlertTriangle className="h-8 w-8 mx-auto mb-4 text-red-600" />
+          <p className="text-red-600 mb-4">Error loading dashboard data</p>
+          <p className="text-slate-600 text-sm mb-4">
+            Logged in as: {adminUser.username} ({adminUser.role})
+          </p>
+          <Button onClick={() => refetchStats()} className="bg-emerald-600 hover:bg-emerald-700">
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -96,11 +251,13 @@ export default function AdminDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Admin Dashboard</h1>
-          <p className="text-slate-600">Manage community issues and users</p>
+          <p className="text-slate-600">
+            Welcome back, {adminUser.username} ({adminUser.role.replace('_', ' ')}) - Manage community issues and users
+          </p>
         </div>
         <div className="flex items-center gap-2 text-sm text-slate-600">
           <Calendar className="h-4 w-4" />
-          <span>Last updated: {new Date().toLocaleTimeString()}</span>
+          <span>Last updated: {userStatsData?.timestamp ? new Date(userStatsData.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString()}</span>
         </div>
       </div>
 
@@ -117,57 +274,57 @@ export default function AdminDashboard() {
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
           <CardContent className="p-4 text-center">
             <UserPlus className="h-6 w-6 text-green-600 mx-auto mb-2" />
-            <p className="text-xl font-bold text-green-600">+{adminStats.newUsersToday}</p>
+            <p className="text-xl font-bold text-green-600">+{adminStats.residentsToday}</p>
             <p className="text-xs text-slate-600">New Today</p>
           </CardContent>
         </Card>
 
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
           <CardContent className="p-4 text-center">
-            <AlertTriangle className="h-6 w-6 text-slate-600 mx-auto mb-2" />
-            <p className="text-xl font-bold text-slate-900">{adminStats.totalIssues}</p>
-            <p className="text-xs text-slate-600">Total Issues</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
-          <CardContent className="p-4 text-center">
-            <Eye className="h-6 w-6 text-orange-600 mx-auto mb-2" />
-            <p className="text-xl font-bold text-orange-600">{adminStats.pendingReview}</p>
-            <p className="text-xs text-slate-600">Need Review</p>
+            <TrendingUp className="h-6 w-6 text-purple-600 mx-auto mb-2" />
+            <p className="text-xl font-bold text-purple-600">+{adminStats.residentsThisWeek}</p>
+            <p className="text-xs text-slate-600">This Week</p>
           </CardContent>
         </Card>
 
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
           <CardContent className="p-4 text-center">
             <CheckCircle className="h-6 w-6 text-emerald-600 mx-auto mb-2" />
-            <p className="text-xl font-bold text-emerald-600">+{adminStats.resolvedToday}</p>
-            <p className="text-xs text-slate-600">Resolved Today</p>
+            <p className="text-xl font-bold text-emerald-600">{adminStats.activeUsers}</p>
+            <p className="text-xs text-slate-600">Active Users</p>
           </CardContent>
         </Card>
 
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
           <CardContent className="p-4 text-center">
-            <TrendingUp className="h-6 w-6 text-emerald-600 mx-auto mb-2" />
-            <p className="text-xl font-bold text-emerald-600">{adminStats.activeUsers}</p>
-            <p className="text-xs text-slate-600">Active Users</p>
+            <Eye className="h-6 w-6 text-orange-600 mx-auto mb-2" />
+            <p className="text-xl font-bold text-orange-600">{adminStats.suspendedUsers}</p>
+            <p className="text-xs text-slate-600">Suspended</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
+          <CardContent className="p-4 text-center">
+            <Settings className="h-6 w-6 text-slate-600 mx-auto mb-2" />
+            <p className="text-xl font-bold text-slate-900">{adminStats.totalDepartments}</p>
+            <p className="text-xs text-slate-600">Departments</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Issues Overview Chart */}
+        {/* User Roles Overview Chart */}
         <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm border-slate-200">
           <CardHeader>
-            <CardTitle className="text-slate-900">Issues Overview</CardTitle>
-            <p className="text-sm text-slate-600">Current status of all community issues</p>
+            <CardTitle className="text-slate-900">Users by Role</CardTitle>
+            <p className="text-sm text-slate-600">Distribution of users by their roles</p>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={issueStatusData}>
+              <BarChart data={getUserRoleData()}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="status" />
+                <XAxis dataKey="role" />
                 <YAxis />
                 <Tooltip />
                 <Bar dataKey="count" fill="#10b981" />
@@ -180,7 +337,7 @@ export default function AdminDashboard() {
         <Card className="bg-white/80 backdrop-blur-sm border-slate-200">
           <CardHeader>
             <CardTitle className="text-slate-900">Recent Activity</CardTitle>
-            <p className="text-sm text-slate-600">Latest community actions</p>
+            <p className="text-sm text-slate-600">Latest user registrations</p>
           </CardHeader>
           <CardContent className="space-y-3">
             {recentActivity.map((activity, index) => (
@@ -248,7 +405,7 @@ export default function AdminDashboard() {
           <CardContent className="p-4 text-center">
             <AlertTriangle className="h-8 w-8 text-emerald-600 mx-auto mb-2" />
             <p className="font-semibold text-emerald-900">Review Issues</p>
-            <p className="text-sm text-emerald-700">{adminStats.pendingReview} pending</p>
+            <p className="text-sm text-emerald-700">Manage community issues</p>
           </CardContent>
         </Card>
 

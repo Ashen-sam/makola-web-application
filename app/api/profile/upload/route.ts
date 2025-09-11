@@ -4,8 +4,8 @@ import { supabase } from "@/lib/supabaseClient";
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    const file = formData.get('file') as File;
-    const user_id = formData.get('user_id') as string;
+    const file = formData.get("file") as File;
+    const user_id = formData.get("user_id") as string;
 
     if (!file || !user_id) {
       return NextResponse.json(
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif"];
     if (!allowedTypes.includes(file.type)) {
       return NextResponse.json(
         { error: "Only JPEG, PNG, and GIF files are allowed" },
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create unique filename
-    const fileExtension = file.name.split('.').pop();
+    const fileExtension = file.name.split(".").pop();
     const fileName = `profile_${user_id}_${Date.now()}.${fileExtension}`;
     const filePath = `profile-pictures/${fileName}`;
 
@@ -43,10 +43,10 @@ export async function POST(request: NextRequest) {
 
     // Upload to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('profile-images') // Make sure this bucket exists in Supabase
+      .from("profile-images") // Make sure this bucket exists in Supabase
       .upload(filePath, fileBuffer, {
         contentType: file.type,
-        upsert: true
+        upsert: true,
       });
 
     if (uploadError) {
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     // Get public URL
     const { data: urlData } = supabase.storage
-      .from('profile-images')
+      .from("profile-images")
       .getPublicUrl(filePath);
 
     const publicUrl = urlData.publicUrl;
@@ -80,9 +80,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       message: "Profile picture uploaded successfully",
-      profile_picture: publicUrl
+      profile_picture: publicUrl,
     });
-
   } catch (error) {
     console.error("Profile picture upload error:", error);
     return NextResponse.json(
@@ -111,10 +110,7 @@ export async function DELETE(request: NextRequest) {
       .single();
 
     if (userError || !user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     // If there's a profile picture, delete it from storage
@@ -122,11 +118,9 @@ export async function DELETE(request: NextRequest) {
       try {
         // Extract file path from URL
         const url = new URL(user.profile_picture);
-        const filePath = url.pathname.split('/').slice(-2).join('/'); // Get last two segments
-        
-        await supabase.storage
-          .from('profile-images')
-          .remove([filePath]);
+        const filePath = url.pathname.split("/").slice(-2).join("/"); // Get last two segments
+
+        await supabase.storage.from("profile-images").remove([filePath]);
       } catch (storageError) {
         console.error("Storage deletion error:", storageError);
         // Continue even if storage deletion fails
@@ -147,9 +141,8 @@ export async function DELETE(request: NextRequest) {
     }
 
     return NextResponse.json({
-      message: "Profile picture removed successfully"
+      message: "Profile picture removed successfully",
     });
-
   } catch (error) {
     console.error("Profile picture removal error:", error);
     return NextResponse.json(

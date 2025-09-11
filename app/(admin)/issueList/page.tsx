@@ -1,4 +1,5 @@
 "use client"
+//admin issue list page
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -65,7 +66,7 @@ export default function AdminFeedPage() {
     // API hooks - removed duplicates, keeping only necessary ones
     const [updateIssue] = useUpdateIssueMutation()
     const [deleteIssue] = useDeleteIssueMutation()
-    const [updateIssueStatus] = useUpdateIssueStatusMutation()
+    const [updateIssueStatus, { isLoading: isUpdatingStatus, }] = useUpdateIssueStatusMutation()
 
     // Transform API data to match component structure
     const transformedIssues = useMemo(() => {
@@ -371,6 +372,7 @@ export default function AdminFeedPage() {
                                 handleDeleteIssue={handleDeleteIssue}
                                 handleStatusChange={handleStatusChange}
                                 handleAssignOfficer={handleAssignOfficer}
+                                isUpdatingStatus={isUpdatingStatus}
                             />
                         ))}
 

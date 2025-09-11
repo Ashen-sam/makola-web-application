@@ -35,13 +35,16 @@ export async function PUT(request: NextRequest) {
       platform_description,
       contact_email,
       user_id,
-      role
+      role,
     } = await request.json();
 
     // Check authorization - only urban councilor can update
-    if (role !== 'urban_councilor') {
+    if (role !== "urban_councilor") {
       return NextResponse.json(
-        { error: "Unauthorized. Only urban councilors can update platform settings." },
+        {
+          error:
+            "Unauthorized. Only urban councilors can update platform settings.",
+        },
         { status: 403 }
       );
     }
@@ -71,7 +74,7 @@ export async function PUT(request: NextRequest) {
         platform_description,
         contact_email,
         updated_at: new Date().toISOString(),
-        updated_by: user_id
+        updated_by: user_id,
       })
       .eq("id", 1)
       .select("platform_name, platform_description, contact_email, updated_at")
@@ -87,7 +90,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({
       message: "Platform settings updated successfully",
-      settings: updatedSettings
+      settings: updatedSettings,
     });
   } catch (error) {
     console.error("Update platform settings error:", error);

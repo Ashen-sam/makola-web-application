@@ -5,7 +5,7 @@ import AnimatedLogo from "./animated-logo"
 
 interface LoadingScreenProps {
   isVisible: boolean
-  type: "refresh" | "login" | "logout"
+  type: "refresh" | "login" | "logout" | "route-change"
   onComplete: () => void
 }
 
