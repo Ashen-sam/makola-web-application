@@ -9,30 +9,69 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Bell, Home, LogOut, Settings, Shield, UserCheck } from "lucide-react"
+import { Bell, Home, LogOut, Shield } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
 import type React from "react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import LoadingScreen from "../../components/loading-screen"
 
 interface AdminLayoutProps {
     children: React.ReactNode
 }
 
+interface UserData {
+    user_id: number
+    username: string
+    role: string
+    status: string
+    officer_id: number
+    department_name: string
+    address: string
+    phone_number: string
+}
+
 export default function AdminLayout({ children }: AdminLayoutProps) {
     const router = useRouter()
     const pathname = usePathname()
-    const [notifications] = useState(5)
+    const [notifications] = useState(1)
     const [showLoading, setShowLoading] = useState(false)
+    const [userData, setUserData] = useState<UserData | null>(null)
 
     const navItems = [
-        { id: "dashboard", label: "Assigned Issues", icon: Home, path: "/dashboard" },
-        { id: "settings", label: "Settings", icon: Settings, path: "/settings" },
+        { id: "dashboard", label: "Assigned Issues", icon: Home, path: "/home" },
     ]
+
+    // Get user data from localStorage on component mount
+    useEffect(() => {
+        const storedUserData = localStorage.getItem('userData')
+        if (storedUserData) {
+            try {
+                const parsedData = JSON.parse(storedUserData)
+                setUserData(parsedData)
+                console.log('User data loaded:', parsedData) // Debug log
+            } catch (error) {
+                console.error('Error parsing user data from localStorage:', error)
+            }
+        }
+    }, [])
+
+    // Generate initials from username
+    const getInitials = (name: string) => {
+        if (!name || name.trim() === '') return 'AD'
+
+        return name
+            .trim()
+            .split(' ')
+            .map(word => word.charAt(0).toUpperCase())
+            .slice(0, 2)
+            .join('')
+    }
 
     const handleSignOut = () => {
         setShowLoading(true)
         setTimeout(() => {
+            // Clear user data from localStorage on sign out
+            localStorage.removeItem('userData')
             router.push("/")
         }, 2500)
     }
@@ -56,8 +95,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                                     <Shield className="h-6 w-6 text-white" />
                                 </div>
                                 <div>
-                                    <h1 className="text-xl font-bold text-slate-900">Department Officer</h1>
-                                    <p className="text-xs text-slate-600">Community Management Portal</p>
+                                    <h1 className="text-xl font-bold text-slate-900">
+                                        {userData?.role === 'department_officer' ? 'Department Officer' : 'Officer'}
+                                    </h1>
+                                    <p className="text-xs text-slate-600">
+                                        {userData?.department_name || 'Community Management Portal'}
+                                    </p>
                                 </div>
                             </div>
 
@@ -102,16 +145,31 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                                         >
                                             <Avatar className="h-8 w-8">
                                                 <AvatarImage src="/placeholder.svg?height=32&width=32" />
-                                                <AvatarFallback className="bg-emerald-100 text-emerald-700">AD</AvatarFallback>
+                                                <AvatarFallback className="bg-emerald-100 text-emerald-700 font-medium">
+                                                    {userData?.username ? getInitials(userData.username) : 'AD'}
+                                                </AvatarFallback>
                                             </Avatar>
-                                            <span className="hidden md:block text-slate-700">Officer</span>
+                                            <span className="hidden md:block text-slate-700 font-medium">
+                                                {userData?.username || 'Officer'}
+                                            </span>
                                         </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="w-48">
-                                        <DropdownMenuItem>
-                                            <UserCheck className="h-4 w-4 mr-2" />
-                                            Admin Profile
-                                        </DropdownMenuItem>
+                                    <DropdownMenuContent align="end" className="w-56">
+                                        {userData && (
+                                            <>
+                                                <div className="px-3 py-2 border-b">
+                                                    <p className="font-medium text-sm">{userData.username}</p>
+                                                    <p className="text-xs text-slate-500 capitalize">
+                                                        {userData.role.replace('_', ' ')}
+                                                    </p>
+                                                    <p className="text-xs text-slate-500 mt-1">
+                                                        {userData.department_name}
+                                                    </p>
+                                                    <p className="text-xs text-slate-500">{userData.address}</p>
+                                                    <p className="text-xs text-slate-500">{userData.phone_number}</p>
+                                                </div>
+                                            </>
+                                        )}
                                         <DropdownMenuSeparator />
                                         <DropdownMenuItem className="text-red-600" onClick={handleSignOut}>
                                             <LogOut className="h-4 w-4 mr-2" />

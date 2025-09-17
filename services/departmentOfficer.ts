@@ -135,7 +135,7 @@ export const departmentOfficerApi = baseApi.injectEndpoints({
       { issue_id: number; data: UpdateStatusRequest }
     >({
       query: ({ issue_id, data }) => ({
-        url: `${controller}/issues/${issue_id}/status`,
+        url: `/${controller}/issues/${issue_id}/status`,
         method: "PATCH",
         body: data,
       }),

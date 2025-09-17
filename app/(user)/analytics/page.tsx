@@ -4,34 +4,81 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
-import { BarChart3, MapPin, CheckCircle, Clock, AlertTriangle, TrendingUp, Users } from "lucide-react"
+import { BarChart3, MapPin, CheckCircle, Clock, AlertTriangle, TrendingUp, Users, Loader2 } from "lucide-react"
+import { useGetResidentsAnalyticsQuery } from "@/services/analytics"
 
 export default function Analytics() {
-  // Simplified area data - easy to understand
-  const areaData = [
-    { area: "Main Road", resolved: 32, pending: 13, total: 45 },
-    { area: "School Lane", resolved: 28, pending: 10, total: 38 },
-    { area: "Market Street", resolved: 35, pending: 17, total: 52 },
-    { area: "Residential A", resolved: 22, pending: 7, total: 29 },
-    { area: "Residential B", resolved: 20, pending: 14, total: 34 },
-    { area: "Industrial Zone", resolved: 30, pending: 11, total: 41 },
-  ]
+  // Fetch data from API
+  const { data: apiResponse, isLoading, isError } = useGetResidentsAnalyticsQuery()
 
-  // Simple issue types
-  const issueTypes = [
-    { name: "Roads", count: 89, color: "#ef4444" },
-    { name: "Lighting", count: 67, color: "#f97316" },
-    { name: "Garbage", count: 45, color: "#eab308" },
-    { name: "Water", count: 38, color: "#22c55e" },
-    { name: "Safety", count: 29, color: "#3b82f6" },
-    { name: "Other", count: 71, color: "#6b7280" },
-  ]
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="bg-emerald-600 p-3 rounded-lg">
+            <BarChart3 className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Community Overview</h1>
+            <p className="text-slate-600">Loading analytics data...</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+          <span className="ml-2 text-slate-600">Loading analytics...</span>
+        </div>
+      </div>
+    )
+  }
 
-  // Overall statistics
-  const totalIssues = 339
-  const resolvedIssues = 167
-  const pendingIssues = 172
-  const resolutionRate = Math.round((resolvedIssues / totalIssues) * 100)
+  // Error state
+  if (isError || !apiResponse?.success) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="bg-emerald-600 p-3 rounded-lg">
+            <BarChart3 className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Community Overview</h1>
+            <p className="text-slate-600">Error loading analytics data</p>
+          </div>
+        </div>
+        <Card className="bg-red-50 border-red-200">
+          <CardContent className="p-6 text-center">
+            <AlertTriangle className="h-8 w-8 text-red-600 mx-auto mb-3" />
+            <p className="text-red-800">Failed to load analytics data. Please try again later.</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Extract data from API response
+  const { basicStats, locationAnalytics, categoryAnalytics, summary } = apiResponse.data
+
+  // Transform location analytics for the area chart
+  const areaData = locationAnalytics.map(location => ({
+    area: location.name,
+    resolved: location.resolved,
+    pending: location.ongoing,
+    total: location.total
+  }))
+
+  // Transform category analytics for the pie chart with colors
+  const colors = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#6b7280", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"]
+  const issueTypes = categoryAnalytics.map((category, index) => ({
+    name: category.category,
+    count: category.count,
+    color: colors[index % colors.length]
+  }))
+
+  // Overall statistics from API
+  const totalIssues = basicStats.totalIssues
+  const resolvedIssues = basicStats.resolvedIssues
+  const pendingIssues = basicStats.ongoingIssues
+  const resolutionRate = Math.round(basicStats.overallSuccessRate)
 
   return (
     <div className="space-y-6">
@@ -146,15 +193,15 @@ export default function Analytics() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {areaData.map((area, index) => {
-              const successRate = Math.round((area.resolved / area.total) * 100)
+            {locationAnalytics.map((location, index) => {
+              const successRate = Math.round(location.successRate)
               const isGood = successRate >= 70
               const isOkay = successRate >= 50
 
               return (
                 <div key={index} className="bg-slate-50 rounded-lg p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-slate-900">{area.area}</h3>
+                    <h3 className="font-semibold text-slate-900">{location.name}</h3>
                     <Badge
                       className={`${isGood
                         ? "bg-green-100 text-green-800 border-green-200"
@@ -171,7 +218,7 @@ export default function Analytics() {
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-600">Progress</span>
                       <span className="font-medium text-slate-900">
-                        {area.resolved} of {area.total} fixed
+                        {location.resolved} of {location.total} fixed
                       </span>
                     </div>
                     <Progress value={successRate} className="h-2" />
@@ -179,11 +226,11 @@ export default function Analytics() {
 
                   <div className="grid grid-cols-2 gap-2 text-center">
                     <div className="bg-green-100 rounded p-2">
-                      <p className="text-lg font-bold text-green-700">{area.resolved}</p>
+                      <p className="text-lg font-bold text-green-700">{location.resolved}</p>
                       <p className="text-xs text-green-600">Fixed</p>
                     </div>
                     <div className="bg-orange-100 rounded p-2">
-                      <p className="text-lg font-bold text-orange-700">{area.pending}</p>
+                      <p className="text-lg font-bold text-orange-700">{location.ongoing}</p>
                       <p className="text-xs text-orange-600">Pending</p>
                     </div>
                   </div>
@@ -203,15 +250,15 @@ export default function Analytics() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
             <div>
-              <p className="text-2xl font-bold text-emerald-700">School Lane</p>
+              <p className="text-2xl font-bold text-emerald-700">{summary.bestPerformingLocation.name}</p>
               <p className="text-sm text-emerald-600">Best performing area</p>
             </div>
             <div>
-              <p className="text-2xl font-bold text-emerald-700">Roads</p>
+              <p className="text-2xl font-bold text-emerald-700">{summary.mostReportedIssueType.category}</p>
               <p className="text-sm text-emerald-600">Most reported issue</p>
             </div>
             <div>
-              <p className="text-2xl font-bold text-emerald-700">{resolutionRate}%</p>
+              <p className="text-2xl font-bold text-emerald-700">{Math.round(summary.overallSuccessRate)}%</p>
               <p className="text-sm text-emerald-600">Overall success rate</p>
             </div>
           </div>

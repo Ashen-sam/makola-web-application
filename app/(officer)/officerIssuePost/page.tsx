@@ -59,7 +59,7 @@ export default function OfficerIssuePost({
     users,
     photo,
     handleStatusChange,
-    handleAddComment: handleAddCommentProp,
+    handleAddComment,
     isUpdatingStatus,
     assigned_officer,
     department,
@@ -75,7 +75,6 @@ export default function OfficerIssuePost({
     const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
     const [showDetails, setShowDetails] = useState(false)
     const [statusUpdate, setStatusUpdate] = useState("")
-    const [officerNote, setOfficerNote] = useState("")
 
     // Reply states
     const [replyingTo, setReplyingTo] = useState<number | null>(null)
@@ -100,6 +99,8 @@ export default function OfficerIssuePost({
         }
         return photoArray
     }, [photo, photos])
+
+    console.log(issue_id, 'issue id')
 
     // Comments query - skip until comments are requested
     const {
@@ -328,20 +329,12 @@ export default function OfficerIssuePost({
 
     const canModifyComment = (comment: Comment) => {
         if (!currentUser || !currentUserId) return false;
-        if (comment.user_id === currentUserId) return true;
-        if (currentUserRole === 'department_officer') return true;
-        return false;
+        // Only allow users to modify their own comments
+        return comment.user_id === currentUserId;
     };
 
     // Officer action handlers
-    const handleStatusUpdate = async () => {
-        if (statusUpdate && handleStatusChange) {
-            await handleStatusChange(issue_id, statusUpdate);
-            setStatusUpdate("");
-        }
-    };
 
-    console.log(statusUpdate, 'asd')
 
 
     // Style helper functions
@@ -667,7 +660,7 @@ export default function OfficerIssuePost({
                                     </SelectContent>
                                 </Select>
                                 <Button
-                                    onClick={handleStatusUpdate}
+                                    onClick={handleStatusChange ? () => handleStatusChange(issue_id, statusUpdate) : undefined}
                                     disabled={!statusUpdate || isUpdatingStatus}
                                     size="sm"
                                     className="bg-emerald-600 hover:bg-emerald-700"
@@ -841,7 +834,13 @@ export default function OfficerIssuePost({
                                 />
 
                                 <Button
-                                    onClick={handleComment}
+                                    onClick={() => {
+                                        if (handleAddComment) {
+                                            handleAddComment(issue_id, newComment);
+                                            // setNewComment("");
+                                            // setShowComments(true);
+                                        }
+                                    }}
                                     disabled={!newComment.trim() || isAddingComment}
                                     size="sm"
                                     className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"

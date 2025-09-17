@@ -80,6 +80,7 @@ import {
 } from "@/services/issues"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabaseClient"
 
 // Fixed Types matching API structure
 interface UserProfile {
@@ -413,20 +414,88 @@ export default function Profile() {
     const file = event.target.files?.[0]
     if (!file || !currentUserId) return
 
+    // Validate file
+    const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error("Profile picture must be less than 5MB")
+      return
+    }
+
+    if (!file.type.startsWith('image/')) {
+      toast.error("Please select a valid image file")
+      return
+    }
+
+    const loadingToast = toast.loading("Uploading profile picture...")
+
     try {
-      const result = await uploadProfilePicture({
-        file,
-        user_id: currentUserId
-      }).unwrap()
+      // Upload to Supabase first (similar to report issue)
+      const fileExt = file.name.split('.').pop()
+      const timestamp = Date.now()
+      const randomString = Math.random().toString(36).substring(2)
+      const fileName = `profile-${currentUserId}-${timestamp}-${randomString}.${fileExt}`
+      const filePath = fileName
 
-      // Update the profile with new picture URL
-      setEditProfile(prev => ({ ...prev, avatar: result.profile_picture }))
-      setProfile(prev => ({ ...prev, avatar: result.profile_picture }))
+      console.log('Uploading profile picture to Supabase:', filePath)
 
-      toast.success("Profile picture updated successfully!")
+      const { data, error } = await supabase.storage
+        .from('profile-images') // Use the correct bucket name
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        })
+
+      if (error) {
+        console.error('Supabase upload error:', error)
+        throw new Error(`Upload failed: ${error.message}`)
+      }
+
+      console.log('Supabase upload successful:', data)
+
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage
+        .from('profile-images')
+        .getPublicUrl(data.path)
+
+      const profilePictureUrl = publicUrlData.publicUrl
+      console.log('Profile picture URL:', profilePictureUrl)
+
+      // Update profile via API
+      if (user?.role === 'resident') {
+        const updateData: UpdateResidentProfileRequest = {
+          user_id: currentUserId,
+          profile_picture: profilePictureUrl,
+        }
+        await updateProfile(updateData).unwrap()
+      } else if (user?.role === 'department_officer') {
+        const updateData: UpdateOfficerProfileRequest = {
+          user_id: currentUserId,
+          profile_picture: profilePictureUrl,
+        }
+        await updateProfile(updateData).unwrap()
+      }
+
+      // Update local state immediately
+      setEditProfile(prev => ({ ...prev, avatar: profilePictureUrl }))
+      setProfile(prev => ({ ...prev, avatar: profilePictureUrl }))
+
+      // Refresh profile data
+      await refetchProfile()
+
+      toast.success("Profile picture updated successfully!", { id: loadingToast })
+
     } catch (error: unknown) {
       console.error("Failed to upload profile picture:", error)
-      toast.error("Failed to upload profile picture. Please try again.")
+
+      let errorMessage = "Failed to upload profile picture. Please try again."
+      if (typeof error === "object" && error !== null && "message" in error) {
+        errorMessage = (error as { message: string }).message
+      }
+
+      toast.error(errorMessage, { id: loadingToast })
+    } finally {
+      // Reset the input
+      event.target.value = ''
     }
   }
 

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import logo from '../public/sam.png'
 import {
   Users,
   AlertTriangle,
@@ -270,7 +271,7 @@ export default function LandingPage({ onTryNow }: LandingPageProps) {
 
             <div className="relative">
               <Image
-                src="/placeholder.svg?height=500&width=600"
+                src={logo}
                 alt="Community collaboration"
                 className="rounded-2xl shadow-2xl"
                 width={600}
@@ -369,38 +370,9 @@ export default function LandingPage({ onTryNow }: LandingPageProps) {
             <p className="text-xl text-slate-600">Have questions? We&rsquo;d love to hear from you.</p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+          <div className="grid  gap-12">
             {/* Contact Form */}
-            <Card className="shadow-lg border-0">
-              <CardContent className="p-8">
-                <h3 className="text-2xl font-semibold text-slate-900 mb-6">Send us a Message</h3>
-                <form className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="firstName">First Name</Label>
-                      <Input id="firstName" placeholder="John" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="lastName">Last Name</Label>
-                      <Input id="lastName" placeholder="Doe" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input id="email" type="email" placeholder="john@example.com" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="subject">Subject</Label>
-                    <Input id="subject" placeholder="How can we help?" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="message">Message</Label>
-                    <Textarea id="message" placeholder="Tell us more about your inquiry..." className="min-h-[120px]" />
-                  </div>
-                  <Button className="w-full bg-emerald-600 hover:bg-emerald-700">Send Message</Button>
-                </form>
-              </CardContent>
-            </Card>
+
 
             {/* Contact Information */}
             <div className="space-y-8">

@@ -16,7 +16,6 @@ export function useIssueRealtime() {
         (payload) => {
           console.log("Issue updated:", payload.new);
 
-          // Refetch issues so residents see new status
           dispatch(issuesApi.util.invalidateTags(["Issues"]));
         }
       )
@@ -26,7 +25,6 @@ export function useIssueRealtime() {
         (payload) => {
           console.log("New comment added:", payload.new);
 
-          // Invalidate comments for the specific issue
           const issueId = payload.new.issue_id;
           dispatch(
             issuesApi.util.invalidateTags([
@@ -43,7 +41,6 @@ export function useIssueRealtime() {
         (payload) => {
           console.log("Comment updated:", payload.new);
 
-          // Invalidate comments for the specific issue
           const issueId = payload.new.issue_id;
           dispatch(
             issuesApi.util.invalidateTags([
