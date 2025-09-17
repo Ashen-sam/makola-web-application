@@ -5,15 +5,20 @@ import {
   useDeleteUserMutation,
   useGetUsersQuery,
   useGetUsersStatsQuery,
+  useUpdateUserMutation,
   useUpdateUserStatusMutation,
   type CreateDepartmentOfficerRequest,
   type CreateResidentRequest,
+  type UpdateDepartmentOfficerRequest,
+  type UpdateResidentRequest,
   type UserRole,
-  type UserStatus
+  type UserStatus,
+  type BaseUser
 } from "@/services/admin";
 import {
   AlertTriangle,
   Calendar,
+  Edit,
   Loader2,
   MapPin,
   Plus,
@@ -29,6 +34,8 @@ import { useEffect, useState } from "react";
 
 export default function AdminUsers() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [editingUser, setEditingUser] = useState<BaseUser | null>(null)
   const [userType, setUserType] = useState<"resident" | "department_officer" | "">("")
   const [filterType, setFilterType] = useState<"all" | "resident" | "department_officer" | "urban_councilor">("all")
   const [filterStatus, setFilterStatus] = useState<"all" | "active" | "suspended">("all")
@@ -91,6 +98,11 @@ export default function AdminUsers() {
     error: createError
   }] = useCreateUserMutation()
 
+  const [updateUser, {
+    isLoading: updateLoading,
+    error: updateError
+  }] = useUpdateUserMutation()
+
   const [updateUserStatus, {
     isLoading: updateStatusLoading
   }] = useUpdateUserStatusMutation()
@@ -123,6 +135,29 @@ export default function AdminUsers() {
       userName: user.username,
       currentStatus: user.status
     })
+  }
+
+  const handleEditUser = (user: BaseUser) => {
+    setEditingUser(user)
+    setIsEditMode(true)
+
+    // Determine user type based on role
+    const currentUserType = user.role === 'department_officer' ? 'department_officer' : 'resident'
+    setUserType(currentUserType)
+
+    // Populate form with existing data
+    setFormData({
+      name: user.profile?.[0]?.name || "",
+      username: user.username,
+      address: user.address,
+      phone_number: user.phoneNumber,
+      nic: user.nic || "",
+      password: "",
+      confirmPassword: "",
+      department_name: user.profile?.[0]?.department_name || "",
+    })
+
+    setIsDialogOpen(true)
   }
 
   const confirmUserAction = async () => {
@@ -174,12 +209,25 @@ export default function AdminUsers() {
   }
 
   const validateForm = (): boolean => {
-    if (!userType || !formData.username || !formData.password || !formData.address || !formData.phone_number) {
+    if (!userType || !formData.username || !formData.address || !formData.phone_number) {
+      return false
+    }
+
+    // For create mode, password is required
+    if (!isEditMode && !formData.password) {
       return false
     }
 
     if (userType === "resident") {
-      return !!(formData.name && formData.nic && formData.confirmPassword)
+      // For create mode, name and nic are required
+      if (!isEditMode) {
+        return !!(formData.name && formData.nic && formData.confirmPassword)
+      }
+      // For edit mode, if password is provided, confirmPassword is required
+      if (formData.password && !formData.confirmPassword) {
+        return false
+      }
+      return true
     }
 
     if (userType === "department_officer") {
@@ -232,6 +280,63 @@ export default function AdminUsers() {
     }
   }
 
+  const handleUpdateUser = async () => {
+    if (!validateForm() || !editingUser) {
+      return
+    }
+
+    try {
+      let userData: UpdateResidentRequest | UpdateDepartmentOfficerRequest
+
+      const baseData = {
+        username: formData.username !== editingUser.username ? formData.username : undefined,
+        password: formData.password || undefined,
+        admin_user_id: adminUserId.toString(),
+        admin_role: adminRole ?? '',
+        address: formData.address !== editingUser.address ? formData.address : undefined,
+        phone_number: formData.phone_number !== editingUser.phoneNumber ? formData.phone_number : undefined,
+      }
+
+      if (userType === "resident") {
+        userData = {
+          ...baseData,
+          name: formData.name !== (editingUser.profile?.[0]?.name || "") ? formData.name : undefined,
+          nic: formData.nic !== editingUser.nic ? formData.nic : undefined,
+        } as UpdateResidentRequest
+      } else {
+        userData = {
+          ...baseData,
+          department_name: formData.department_name !== (editingUser.profile?.[0]?.department_name || "") ? formData.department_name : undefined,
+        } as UpdateDepartmentOfficerRequest
+      }
+
+      // Remove undefined values
+      const cleanedUserData = Object.fromEntries(
+        Object.entries(userData).filter(([_, value]) => value !== undefined)
+      )
+
+      await updateUser({
+        user_id: editingUser.user_id,
+        ...cleanedUserData
+      } as any).unwrap()
+
+      setIsDialogOpen(false)
+      resetForm()
+      // You might want to show a success toast here
+    } catch (error) {
+      console.error('Failed to update user:', error)
+      // You might want to show an error toast here
+    }
+  }
+
+  const handleSubmit = async () => {
+    if (isEditMode) {
+      await handleUpdateUser()
+    } else {
+      await handleCreateUser()
+    }
+  }
+
   const resetForm = () => {
     setFormData({
       name: "",
@@ -244,6 +349,8 @@ export default function AdminUsers() {
       department_name: "",
     })
     setUserType("")
+    setIsEditMode(false)
+    setEditingUser(null)
   }
 
   const getStatusColor = (status: UserStatus) => {
@@ -463,6 +570,14 @@ export default function AdminUsers() {
                   <h4 className="font-semibold text-slate-900">Admin Actions</h4>
 
                   <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => handleEditUser(user)}
+                      className="w-full px-3 py-2 text-sm font-medium text-emerald-600 bg-transparent border border-emerald-200 hover:bg-emerald-50 rounded-md transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Edit className="h-4 w-4" />
+                      Edit User
+                    </button>
+
                     {user.status === "active" ? (
                       <button
                         onClick={() => handleUserAction(user.user_id, "suspend")}
@@ -488,12 +603,6 @@ export default function AdminUsers() {
                     >
                       {deleteLoading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Delete User"}
                     </button>
-                    <button
-                      onClick={() => router.push(`/user/profile?${user.user_id}`)}
-                      className="w-full px-3 py-2 text-sm font-medium text-red-600 bg-transparent border border-red-200 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
-                    >
-                      {deleteLoading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "View User Profile"}
-                    </button>
                   </div>
                 </div>
               </div>
@@ -502,18 +611,23 @@ export default function AdminUsers() {
         ))}
       </div>
 
-      {/* Create User Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      {/* Create/Edit User Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={(open) => {
+        setIsDialogOpen(open)
+        if (!open) {
+          resetForm()
+        }
+      }}>
         <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Create New User</DialogTitle>
+            <DialogTitle>{isEditMode ? 'Edit User' : 'Create New User'}</DialogTitle>
             <DialogDescription>
-              Add a new resident or department officer to the system.
+              {isEditMode ? 'Update user information' : 'Add a new resident or department officer to the system.'}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* User Type Selection */}
+            {/* User Type Selection - disabled in edit mode */}
             <div className="space-y-2">
               <label htmlFor="userType" className="block text-sm font-medium text-slate-700">
                 User Type
@@ -522,7 +636,8 @@ export default function AdminUsers() {
                 id="userType"
                 value={userType}
                 onChange={(e) => handleUserTypeChange(e.target.value as typeof userType)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                disabled={isEditMode}
+                className="w-full px-3 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
               >
                 <option value="">Select user type</option>
                 <option value="resident">Resident</option>
@@ -631,20 +746,20 @@ export default function AdminUsers() {
                 {/* Password */}
                 <div className="space-y-2">
                   <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-                    Password
+                    Password {isEditMode && <span className="text-slate-500">(leave blank to keep current)</span>}
                   </label>
                   <input
                     id="password"
                     type="password"
-                    placeholder="Enter password"
+                    placeholder={isEditMode ? "Enter new password (optional)" : "Enter password"}
                     value={formData.password}
                     onChange={(e) => handleInputChange("password", e.target.value)}
                     className="w-full px-3 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   />
                 </div>
 
-                {/* Confirm Password - Only for residents */}
-                {userType === "resident" && (
+                {/* Confirm Password - Only for residents and when password is provided */}
+                {userType === "resident" && (formData.password || !isEditMode) && (
                   <div className="space-y-2">
                     <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-700">
                       Confirm Password
@@ -662,10 +777,20 @@ export default function AdminUsers() {
               </div>
             )}
 
-            {createError && (
+            {/* Error Messages */}
+            {(createError || updateError) && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-md">
                 <p className="text-sm text-red-600">
-                  {'data' in createError ? '' : 'Failed to create user'}
+                  {isEditMode ? 'Failed to update user' : 'Failed to create user'}
+                </p>
+              </div>
+            )}
+
+            {/* Password Mismatch Warning for Residents */}
+            {userType === "resident" && formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword && (
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                <p className="text-sm text-yellow-600">
+                  Passwords do not match
                 </p>
               </div>
             )}
@@ -682,17 +807,17 @@ export default function AdminUsers() {
               Cancel
             </button>
             <button
-              onClick={handleCreateUser}
-              disabled={!validateForm() || createLoading}
+              onClick={handleSubmit}
+              disabled={!validateForm() || createLoading || updateLoading}
               className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-md disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
             >
-              {createLoading ? (
+              {(createLoading || updateLoading) ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Creating...
+                  {isEditMode ? 'Updating...' : 'Creating...'}
                 </>
               ) : (
-                "Create User"
+                isEditMode ? "Update User" : "Create User"
               )}
             </button>
           </DialogFooter>

@@ -49,6 +49,8 @@ export async function PUT(
       canEdit = true; // Urban councilors can edit any comment
     } else if (role === "resident" && comment.user_id === user_id) {
       canEdit = true; // Residents can edit their own comments
+    } else if (role === "department_officer") {
+      canEdit = true; // Department officers can edit any comment
     }
 
     if (!canEdit) {
@@ -142,6 +144,8 @@ export async function DELETE(
       canDelete = true; // Urban councilors can delete any comment
     } else if (role === "resident" && comment.user_id === user_id) {
       canDelete = true; // Residents can delete their own comments
+    } else if (role === "department_officer") {
+      canDelete = true; // Department officers can delete any comment
     }
 
     if (!canDelete) {

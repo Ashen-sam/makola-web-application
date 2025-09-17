@@ -20,6 +20,7 @@ interface UserData {
     lastName?: string
     email?: string
     role?: string
+    avatar?: string // Add avatar field
 }
 
 interface HeaderProps {
@@ -100,7 +101,10 @@ export default function Header({ user, onSignOut }: HeaderProps) {
                                 >
                                     <div className="relative">
                                         <Avatar className="h-8 w-8">
-                                            <AvatarImage src="/placeholder.svg?height=32&width=32" />
+                                            <AvatarImage
+                                                src={user?.avatar || "/placeholder.svg?height=32&width=32"}
+                                                alt={`${user?.username || 'User'} profile picture`}
+                                            />
                                             <AvatarFallback className="bg-emerald-100 text-emerald-700">
                                                 {getInitials()}
                                             </AvatarFallback>

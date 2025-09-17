@@ -7,6 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Users, AlertTriangle, CheckCircle, Clock, TrendingUp, Eye, UserPlus, Settings, Calendar, Loader2 } from "lucide-react"
 import { useGetUsersStatsQuery, useGetUsersQuery } from "@/services/admin"
 import { useState, useEffect } from "react"
+import Link from "next/link"
 
 // Interface for user data in localStorage
 interface StoredUser {
@@ -362,7 +363,9 @@ export default function AdminDashboard() {
               <CardTitle className="text-slate-900">Priority Issues - Action Required</CardTitle>
               <p className="text-sm text-slate-600">High priority issues that need immediate admin attention</p>
             </div>
-            <Button className="bg-emerald-600 hover:bg-emerald-700">View All Issues</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700">
+              <Link href="/issueList">View All Issues</Link>
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -385,14 +388,7 @@ export default function AdminDashboard() {
                     <span>{issue.timeAgo}</span>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
-                    View Details
-                  </Button>
-                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700">
-                    Take Action
-                  </Button>
-                </div>
+
               </div>
             ))}
           </div>

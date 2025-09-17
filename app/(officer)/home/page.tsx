@@ -13,7 +13,6 @@ import {
 } from "@/services/issues"
 import { AlertTriangle, CheckCircle, ClipboardCheck, Clock, Filter, Loader2 } from "lucide-react"
 import { useMemo, useState } from "react"
-import DepartmentOfficerIssuePost from "../officerIssuePost/page"
 import OfficerIssuePost from "../officerIssuePost/page"
 
 export default function DepartmentOfficerHomePage() {
@@ -47,7 +46,7 @@ export default function DepartmentOfficerHomePage() {
         }
     }
 
-    const { userId, role, officerName, department, badgeNumber } = getDepartmentOfficerData()
+    const { userId, role, department } = getDepartmentOfficerData()
 
     // Stats query
     const {
@@ -103,10 +102,10 @@ export default function DepartmentOfficerHomePage() {
             photo: issue.photos?.[0] || undefined,
             photos: issue.photos || [],
             location: issue.location || "Location not specified",
-            timestamp: formatTimestamp(issue.created_date),
+            timestamp: (issue.created_date),
             created_date: issue.created_date,
             priority: issue.priority,
-            status: mapApiStatusToDisplay(issue.status),
+            status: (issue.status),
             likes: 0,
             upvotes: issue.vote_count,
             comments: [],
@@ -230,7 +229,7 @@ export default function DepartmentOfficerHomePage() {
             alert('Error updating status. Please try again.');
         }
 
-        console.log(issueId, newStatus, "status change")
+        console.log(issueId, newStatus, "status change sam")
     };
 
     console.log()
@@ -244,6 +243,7 @@ export default function DepartmentOfficerHomePage() {
         const parsedUser = JSON.parse(userData);
         const currentUserId = parsedUser.user_id;
         const currentUserRole = parsedUser.role;
+        console.log(currentUserRole, 'role of the user')
 
         try {
             await addComment({
@@ -410,7 +410,6 @@ export default function DepartmentOfficerHomePage() {
                                 handleStatusChange={handleStatusChange}
                                 handleAddComment={handleAddComment}
                                 isUpdatingStatus={isUpdatingStatus}
-                                issue_id={issue.issue_id}
                             />
                         ))}
 
@@ -448,39 +447,3 @@ export default function DepartmentOfficerHomePage() {
     )
 }
 
-// Helper functions
-function formatTimestamp(dateString: string): string {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffInMs = now.getTime() - date.getTime()
-    const diffInMinutes = Math.floor(diffInMs / (1000 * 60))
-    const diffInHours = Math.floor(diffInMinutes / 60)
-    const diffInDays = Math.floor(diffInHours / 24)
-
-    if (diffInDays > 7) {
-        return date.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-        })
-    } else if (diffInDays > 0) {
-        return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`
-    } else if (diffInHours > 0) {
-        return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`
-    } else if (diffInMinutes > 0) {
-        return `${diffInMinutes} minute${diffInMinutes > 1 ? 's' : ''} ago`
-    } else {
-        return 'Just now'
-    }
-}
-
-function mapApiStatusToDisplay(status: string): "assigned" | "in-progress" | "resolved" {
-    switch (status) {
-        case 'in_progress':
-            return 'in-progress'
-        case 'resolved':
-            return 'resolved'
-        default:
-            return 'assigned'
-    }
-}

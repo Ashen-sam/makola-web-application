@@ -1,6 +1,7 @@
 "use client"
 import Header from "@/components/Header"
 import Loader from "@/components/loader"
+import { useGetProfileQuery } from "@/services/profile" // Import your profile service
 
 import { useRouter, usePathname } from "next/navigation"
 import type React from "react"
@@ -17,6 +18,7 @@ interface UserData {
   lastName?: string
   email?: string
   role?: string
+  avatar?: string // Add avatar field
 }
 
 export default function UserLayout({ children }: UserLayoutProps) {
@@ -24,12 +26,30 @@ export default function UserLayout({ children }: UserLayoutProps) {
   const pathname = usePathname()
   const [user, setUser] = useState<UserData | null>(null)
   const [loading, setLoading] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null)
+
+  // Get profile data from Redux store
+  const {
+    data: profileData,
+  } = useGetProfileQuery(
+    { user_id: currentUserId! },
+    {
+      skip: !currentUserId
+    }
+  )
 
   useEffect(() => {
     try {
       const userData = localStorage.getItem("user")
       if (userData) {
         const parsedUser = JSON.parse(userData)
+
+        // Extract user ID
+        const userId = parsedUser.user_id || parsedUser.resident_id
+        if (userId) {
+          setCurrentUserId(userId)
+        }
+
         if (!parsedUser.firstName && !parsedUser.lastName && parsedUser.username) {
           const nameParts = parsedUser.username.trim().split(" ")
           parsedUser.firstName = nameParts[0]
@@ -42,12 +62,23 @@ export default function UserLayout({ children }: UserLayoutProps) {
     }
   }, [])
 
-  // Detect page transitions
+  // Update user with profile picture when profile data is available
   useEffect(() => {
-    setLoading(true)
-    const timer = setTimeout(() => setLoading(false), 600) // small delay
-    return () => clearTimeout(timer)
-  }, [pathname])
+    if (profileData?.profile) {
+      const profilePicture = profileData.profile.profile_picture
+      setUser(prevUser => prevUser ? ({
+        ...prevUser,
+        avatar: profilePicture || "/placeholder.svg?height=32&width=32"
+      }) : null)
+    }
+  }, [profileData])
+
+  // Detect page transitions
+  // useEffect(() => {
+  //   setLoading(true)
+  //   const timer = setTimeout(() => setLoading(false), 600) // small delay
+  //   return () => clearTimeout(timer)
+  // }, [pathname])
 
   const handleSignOut = () => {
     localStorage.removeItem("user")

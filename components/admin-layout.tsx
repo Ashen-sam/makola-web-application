@@ -37,7 +37,6 @@ export default function AdminLayout({ children, currentPage, onPageChange }: Adm
     setLoadingType("logout")
     setShowLoading(true)
 
-    // Simulate logout process
     setTimeout(() => {
       console.log("Admin signed out")
     }, 2500)
@@ -72,11 +71,10 @@ export default function AdminLayout({ children, currentPage, onPageChange }: Adm
                       key={item.id}
                       variant={currentPage === item.id ? "default" : "ghost"}
                       onClick={() => onPageChange(item.id)}
-                      className={`flex items-center gap-2 transition-colors duration-200 ${
-                        currentPage === item.id
+                      className={`flex items-center gap-2 transition-colors duration-200 ${currentPage === item.id
                           ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                           : "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
-                      }`}
+                        }`}
                     >
                       <Icon className="h-4 w-4" />
                       {item.label}
@@ -134,11 +132,10 @@ export default function AdminLayout({ children, currentPage, onPageChange }: Adm
                     variant={currentPage === item.id ? "default" : "ghost"}
                     size="sm"
                     onClick={() => onPageChange(item.id)}
-                    className={`flex items-center gap-1 text-xs transition-colors duration-200 ${
-                      currentPage === item.id
+                    className={`flex items-center gap-1 text-xs transition-colors duration-200 ${currentPage === item.id
                         ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                         : "text-slate-700 hover:text-slate-900"
-                    }`}
+                      }`}
                   >
                     <Icon className="h-4 w-4" />
                     {item.label}

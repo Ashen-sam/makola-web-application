@@ -21,7 +21,7 @@ export default function FeedPage() {
     const params: any = { page, limit }
 
     if (filter !== "all") {
-      params.status = filter as "open" | "in-progress" | "resolved"
+      params.status = filter as "open" | "in_progress" | "resolved"
     }
 
     return params
@@ -222,7 +222,7 @@ export default function FeedPage() {
                 Open
               </TabsTrigger>
               <TabsTrigger
-                value="in-progress"
+                value="in_progress"
                 className="data-[state=active]:bg-emerald-600 data-[state=active]:text-white"
               >
                 In Progress
